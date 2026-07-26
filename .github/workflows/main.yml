@@ -35,8 +35,8 @@ jobs:
         run: |
           python FearGreed.py \
             --github-output \
-            --low 5 \
-            --high 35
+            --low 25 \
+            --high 75
 
       - name: Show result
         run: |
