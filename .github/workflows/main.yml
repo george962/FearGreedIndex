@@ -6,8 +6,6 @@ on:
   workflow_dispatch:
 
   schedule:
-    # Runs daily at 8:17 AM UTC.
-    # Change this schedule later if needed.
     - cron: "17 8 * * *"
 
 permissions:
@@ -36,7 +34,7 @@ jobs:
         run: |
           python FearGreed.py \
             --github-output \
-            --low 25 \
+            --low 50 \
             --high 75
 
       - name: Show result
