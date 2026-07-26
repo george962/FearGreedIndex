@@ -1,6 +1,10 @@
 name: Update Fear and Greed Google Sheet
 
 on:
+  push:
+    branches:
+      - main
+
   schedule:
     - cron: "3-59/5 * * * *"
 
