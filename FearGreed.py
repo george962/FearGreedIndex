@@ -36,14 +36,6 @@ DEFAULT_LOW_THRESHOLD = 25.0
 DEFAULT_HIGH_THRESHOLD = 75.0
 DEFAULT_SPREADSHEET = "FearAndGreed"
 DEFAULT_WORKSHEET = "Sheet1"
-SHEET_HEADERS = [
-    "CheckedAtUTC",
-    "DataDate",
-    "Value",
-    "Rating",
-    "AlertType",
-]
-
 
 def fetch_latest(timeout: int = 30) -> dict[str, Any]:
     """Fetch the current index record from CNN's JSON feed."""
@@ -69,8 +61,8 @@ def fetch_latest(timeout: int = 30) -> dict[str, Any]:
     return record
 
 
-def parse_record(record: dict[str, Any]) -> tuple[str, float, str]:
-    """Return data date, score, and rating from a CNN index record."""
+def parse_record(record: dict[str, Any]) -> tuple[str, float, str, datetime]:
+    """Return data date, score, rating, and source timestamp."""
     try:
         score = float(record["score"])
         timestamp = str(record["timestamp"])
@@ -78,14 +70,17 @@ def parse_record(record: dict[str, Any]) -> tuple[str, float, str]:
         raise ValueError("CNN returned an unexpected data format") from error
 
     try:
-        data_date = datetime.fromisoformat(
+        source_time = datetime.fromisoformat(
             timestamp.replace("Z", "+00:00")
-        ).date().isoformat()
+        )
+        if source_time.tzinfo is None:
+            source_time = source_time.replace(tzinfo=timezone.utc)
+        data_date = source_time.date().isoformat()
     except ValueError as error:
         raise ValueError("CNN returned an invalid timestamp") from error
 
     rating = str(record.get("rating", "")).strip()
-    return data_date, score, rating
+    return data_date, score, rating, source_time
 
 
 def determine_alert_type(
@@ -192,17 +187,39 @@ def load_service_account_info() -> dict[str, Any]:
     return info
 
 
+def format_age(source_time: datetime, checked_time: datetime) -> str:
+    """Format how old the source reading is, matching the existing sheet."""
+    seconds = max(0, int((checked_time - source_time).total_seconds()))
+    minutes = seconds // 60
+
+    if minutes < 1:
+        return "a minute ago"
+    if minutes == 1:
+        return "1 minute ago"
+    if minutes < 60:
+        return f"{minutes} minutes ago"
+
+    hours = minutes // 60
+    if hours == 1:
+        return "1 hour ago"
+    if hours < 24:
+        return f"{hours} hours ago"
+
+    days = hours // 24
+    if days == 1:
+        return "1 day ago"
+    return f"{days} days ago"
+
+
 def update_google_sheet(
-    checked_at_utc: str,
-    data_date: str,
+    checked_time: datetime,
+    source_time: datetime,
     value: float,
-    rating: str,
-    alert_type: str,
     spreadsheet_name: str,
     worksheet_name: str,
     append_unchanged: bool,
 ) -> bool:
-    """Append the latest reading to Google Sheets; return True if appended."""
+    """Append to the existing 3-column sheet; return True if appended."""
     try:
         import gspread
         from google.oauth2.service_account import Credentials
@@ -238,36 +255,32 @@ def update_google_sheet(
         ) from error
 
     existing_rows = worksheet.get_all_values()
-    if not existing_rows:
-        worksheet.append_row(SHEET_HEADERS, value_input_option="RAW")
-        existing_rows = [SHEET_HEADERS]
-    elif existing_rows[0] != SHEET_HEADERS:
-        raise RuntimeError(
-            "The first Google Sheet row does not match the expected headers: "
-            + ", ".join(SHEET_HEADERS)
-        )
 
-    if not append_unchanged and len(existing_rows) > 1:
+    if not append_unchanged and existing_rows:
         last_row = existing_rows[-1]
-        if len(last_row) >= 3:
+        if len(last_row) >= 2:
             try:
-                last_value = float(last_row[2])
-            except ValueError:
+                last_value = float(last_row[1])
+            except (TypeError, ValueError):
                 last_value = None
+
             if last_value == value:
                 print(
                     f"Google Sheet unchanged: latest recorded value is {value:g}"
                 )
                 return False
 
-    label = rating.replace("_", " ").title() or "Unknown"
+    checked_at = checked_time.strftime("%Y-%m-%d %H:%M:%S")
+    site_updated = format_age(source_time, checked_time)
+    display_value: int | float = int(value) if value.is_integer() else value
+
     worksheet.append_row(
-        [checked_at_utc, data_date, value, label, alert_type],
+        [checked_at, display_value, site_updated],
         value_input_option="USER_ENTERED",
     )
     print(
-        f'Appended {value:g} ({label}) to "{spreadsheet_name}" / '
-        f'"{worksheet_name}"'
+        f'Appended {display_value} to "{spreadsheet_name}" / '
+        f'"{worksheet_name}" ({site_updated})'
     )
     return True
 
@@ -313,11 +326,12 @@ def main() -> int:
         return 2
 
     try:
-        data_date, value, rating = parse_record(fetch_latest(args.timeout))
+        data_date, value, rating, source_time = parse_record(
+            fetch_latest(args.timeout)
+        )
         alert_type = determine_alert_type(value, args.low, args.high)
-        checked_at_utc = datetime.now(timezone.utc).replace(
-            microsecond=0
-        ).isoformat()
+        checked_time = datetime.now(timezone.utc).replace(microsecond=0)
+        checked_at_utc = checked_time.isoformat()
 
         if args.github_output:
             set_github_outputs(
@@ -332,11 +346,9 @@ def main() -> int:
         sheet_updated = False
         if args.update_sheet:
             sheet_updated = update_google_sheet(
-                checked_at_utc=checked_at_utc,
-                data_date=data_date,
+                checked_time=checked_time,
+                source_time=source_time,
                 value=value,
-                rating=rating,
-                alert_type=alert_type,
                 spreadsheet_name=args.spreadsheet,
                 worksheet_name=args.worksheet,
                 append_unchanged=args.append_unchanged,
