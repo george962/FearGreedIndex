@@ -3,21 +3,29 @@ name: CNN Fear and Greed Monitor
 run-name: Check CNN Fear and Greed Index
 
 on:
-  workflow_dispatch:
+  # Runs immediately whenever you commit to main.
+  push:
+    branches:
+      - main
 
+  # Runs hourly at :30, Monday-Friday.
+  # 11:30-22:30 UTC equals 6:30 AM-5:30 PM Chicago during daylight time.
   schedule:
-    # Runs hourly at minute 30, Monday-Friday,
-    # from 6:30 through 5:30 CST.
-    - cron: "30 6-17 * * 1-5"
-      timezone: "America/Chicago"
+    - cron: "30 11-22 * * 1-5"
+
 permissions:
   contents: read
   issues: write
+
+concurrency:
+  group: cnn-fear-and-greed-monitor
+  cancel-in-progress: false
 
 jobs:
   check-fear-and-greed:
     name: Check Fear and Greed Index
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       - name: Check out repository
@@ -29,7 +37,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          pip install certifi
 
       - name: Get Fear and Greed Index
         id: feargreed
@@ -41,6 +51,7 @@ jobs:
 
       - name: Show result
         run: |
+          echo "Event: ${{ github.event_name }}"
           echo "Date: ${{ steps.feargreed.outputs.date }}"
           echo "Value: ${{ steps.feargreed.outputs.value }}"
           echo "Rating: ${{ steps.feargreed.outputs.rating }}"
@@ -55,14 +66,11 @@ jobs:
           CURRENT_RATING: ${{ steps.feargreed.outputs.rating }}
           CURRENT_DATE: ${{ steps.feargreed.outputs.date }}
 
-          LOW_THRESHOLD: "50"
+          LOW_THRESHOLD: "25"
           HIGH_THRESHOLD: "75"
-
-          # Send another same-day notification when the index
-          # moves this many points from the last notified value.
           MOVE_ALERT_SIZE: "5"
-
           ASSIGNEE: "george962"
+
         run: |
           set -euo pipefail
 
@@ -182,8 +190,6 @@ jobs:
             fi
           fi
 
-          # Creating and assigning a new issue already generates the initial
-          # notification, so do not immediately add a duplicate comment.
           if [ "$ISSUE_WAS_CREATED" = "true" ]; then
             echo "Initial notification was delivered through issue creation."
             exit 0
