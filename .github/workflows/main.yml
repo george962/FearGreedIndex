@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
 
   schedule:
+    # Runs daily at 8:17 AM UTC.
     - cron: "17 8 * * *"
 
 permissions:
@@ -73,7 +74,8 @@ jobs:
           gh issue create \
             --repo "$GITHUB_REPOSITORY" \
             --title "$ISSUE_TITLE" \
-            --body "$ISSUE_BODY"
+            --body "$ISSUE_BODY" \
+            --assignee "george962"
 
       - name: Update existing low alert
         if: >-
@@ -119,7 +121,8 @@ jobs:
           gh issue create \
             --repo "$GITHUB_REPOSITORY" \
             --title "$ISSUE_TITLE" \
-            --body "$ISSUE_BODY"
+            --body "$ISSUE_BODY" \
+            --assignee "george962"
 
       - name: Update existing high alert
         if: >-
