@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
   schedule:
-    # Runs hourly at minute 5, Monday-Friday,
+    # Runs hourly at minute 30, Monday-Friday,
     # from 6:30 through 5:30 CST.
     - cron: "30 6-17 * * 1-5"
       timezone: "America/Chicago"
