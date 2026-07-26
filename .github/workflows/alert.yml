@@ -57,7 +57,7 @@ jobs:
           CURRENT_RATING: ${{ steps.feargreed.outputs.rating }}
           CURRENT_DATE: ${{ steps.feargreed.outputs.date }}
 
-          LOW_THRESHOLD: "50"
+          LOW_THRESHOLD: "20"
           HIGH_THRESHOLD: "75"
 
           # Send another same-day notification when the index
