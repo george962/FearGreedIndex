@@ -21,6 +21,11 @@ DATA_URL = (
     "fearandgreed/graphdata/2021-02-01"
 )
 
+SP500_URL = (
+    "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC"
+    "?interval=1m&range=1d"
+)
+
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -59,6 +64,89 @@ def fetch_latest(timeout: int = 30) -> dict[str, Any]:
         raise RuntimeError("CNN response is missing fear_and_greed")
 
     return record
+
+
+def fetch_sp500_price(timeout: int = 30) -> tuple[float, datetime | None]:
+    """Fetch the latest available S&P 500 (^GSPC) price from Yahoo Finance."""
+    yahoo_headers = {
+        "User-Agent": HEADERS["User-Agent"],
+        "Accept": "application/json, text/plain, */*",
+        "Referer": "https://finance.yahoo.com/quote/%5EGSPC/",
+    }
+    request = Request(SP500_URL, headers=yahoo_headers)
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+
+    try:
+        with urlopen(request, timeout=timeout, context=ssl_context) as response:
+            payload = json.load(response)
+    except HTTPError as error:
+        raise RuntimeError(
+            f"Yahoo Finance returned HTTP {error.code} ({error.reason})"
+        ) from error
+    except URLError as error:
+        raise RuntimeError(
+            f"Could not reach Yahoo Finance: {error.reason}"
+        ) from error
+    except json.JSONDecodeError as error:
+        raise RuntimeError(
+            "Yahoo Finance returned invalid JSON"
+        ) from error
+
+    try:
+        result = payload["chart"]["result"][0]
+    except (KeyError, IndexError, TypeError) as error:
+        chart_error = payload.get("chart", {}).get("error")
+        if chart_error:
+            raise RuntimeError(f"Yahoo Finance error: {chart_error}") from error
+        raise RuntimeError(
+            "Yahoo Finance response is missing S&P 500 data"
+        ) from error
+
+    timestamps = result.get("timestamp") or []
+    indicators = result.get("indicators") or {}
+    quotes = indicators.get("quote") or []
+    closes = quotes[0].get("close", []) if quotes else []
+
+    for index in range(min(len(timestamps), len(closes)) - 1, -1, -1):
+        close = closes[index]
+        if close is not None:
+            try:
+                price = float(close)
+                price_time = datetime.fromtimestamp(
+                    int(timestamps[index]),
+                    tz=timezone.utc,
+                )
+                return price, price_time
+            except (TypeError, ValueError, OSError):
+                continue
+
+    meta = result.get("meta") or {}
+    fallback_price = meta.get("regularMarketPrice")
+    fallback_timestamp = meta.get("regularMarketTime")
+
+    if fallback_price is None:
+        raise RuntimeError(
+            "Yahoo Finance response contains no usable S&P 500 price"
+        )
+
+    try:
+        price = float(fallback_price)
+    except (TypeError, ValueError) as error:
+        raise RuntimeError(
+            "Yahoo Finance returned an invalid S&P 500 price"
+        ) from error
+
+    price_time = None
+    if fallback_timestamp is not None:
+        try:
+            price_time = datetime.fromtimestamp(
+                int(fallback_timestamp),
+                tz=timezone.utc,
+            )
+        except (TypeError, ValueError, OSError):
+            price_time = None
+
+    return price, price_time
 
 
 def parse_record(record: dict[str, Any]) -> tuple[str, float, str, datetime]:
@@ -215,11 +303,12 @@ def update_google_sheet(
     checked_time: datetime,
     source_time: datetime,
     value: float,
+    sp500_price: float,
     spreadsheet_name: str,
     worksheet_name: str,
     append_unchanged: bool,
 ) -> bool:
-    """Append to the existing 3-column sheet; return True if appended."""
+    """Append to the existing sheet, including S&P 500 in column D."""
     try:
         import gspread
         from google.oauth2.service_account import Credentials
@@ -276,11 +365,12 @@ def update_google_sheet(
     site_updated = format_age(source_time, checked_time)
 
     worksheet.append_row(
-        [checked_at, display_value, site_updated],
+        [checked_at, display_value, site_updated, round(sp500_price, 2)],
         value_input_option="USER_ENTERED",
     )
     print(
-        f'Appended {display_value} to "{spreadsheet_name}" / '
+        f'Appended Fear & Greed {display_value} and S&P 500 '
+        f'{sp500_price:.2f} to "{spreadsheet_name}" / '
         f'"{worksheet_name}" ({site_updated})'
     )
     return True
@@ -331,6 +421,7 @@ def main() -> int:
             fetch_latest(args.timeout)
         )
         alert_type = determine_alert_type(value, args.low, args.high)
+        sp500_price, sp500_price_time = fetch_sp500_price(args.timeout)
         checked_time = datetime.now(timezone.utc).replace(microsecond=0)
         checked_at_utc = checked_time.isoformat()
 
@@ -350,6 +441,7 @@ def main() -> int:
                 checked_time=checked_time,
                 source_time=source_time,
                 value=value,
+                sp500_price=sp500_price,
                 spreadsheet_name=args.spreadsheet,
                 worksheet_name=args.worksheet,
                 append_unchanged=args.append_unchanged,
@@ -365,6 +457,10 @@ def main() -> int:
         "value": value,
         "rating": rating,
         "alert_type": alert_type,
+        "sp500_price": round(sp500_price, 2),
+        "sp500_price_time_utc": (
+            sp500_price_time.isoformat() if sp500_price_time else None
+        ),
         "sheet_updated": sheet_updated,
     }
 
@@ -373,6 +469,7 @@ def main() -> int:
     else:
         print(f"Fear & Greed Index: {value:g} ({label}, {data_date})")
         print(f"Alert status: {alert_type}")
+        print(f"S&P 500: {sp500_price:.2f}")
 
     return 0
 
