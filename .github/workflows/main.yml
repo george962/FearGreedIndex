@@ -45,131 +45,276 @@ jobs:
           echo "Rating: ${{ steps.feargreed.outputs.rating }}"
           echo "Alert: ${{ steps.feargreed.outputs.alert_type }}"
 
-      - name: Check for existing low alert
+      # ---------------------------------------------------------
+      # LOW ALERT
+      # ---------------------------------------------------------
+
+      - name: Find permanent low alert issue
         if: steps.feargreed.outputs.alert_type == 'low'
-        id: existing-low
+        id: low-issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ISSUE_NUMBER="$(
+          ISSUE_DATA="$(
             gh issue list \
               --repo "$GITHUB_REPOSITORY" \
-              --state open \
-              --search '"Fear & Greed LOW Alert:" in:title' \
-              --json number \
-              --jq '.[0].number // ""'
+              --state all \
+              --search '"Fear & Greed LOW Alert" in:title' \
+              --json number,title,state \
+              --jq '
+                map(
+                  select(.title == "Fear & Greed LOW Alert")
+                )[0] // {}
+              '
           )"
 
-          echo "issue_number=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
+          ISSUE_NUMBER="$(
+            echo "$ISSUE_DATA" |
+            jq -r '.number // ""'
+          )"
 
-      - name: Create low alert issue
+          ISSUE_STATE="$(
+            echo "$ISSUE_DATA" |
+            jq -r '.state // ""'
+          )"
+
+          echo "number=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "state=$ISSUE_STATE" >> "$GITHUB_OUTPUT"
+
+      - name: Create permanent low alert issue
         if: >-
           steps.feargreed.outputs.alert_type == 'low' &&
-          steps.existing-low.outputs.issue_number == ''
+          steps.low-issue.outputs.number == ''
+        id: create-low
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_TITLE: ${{ steps.feargreed.outputs.issue_title }}
-          ISSUE_BODY: ${{ steps.feargreed.outputs.issue_body }}
         run: |
-          gh issue create \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "$ISSUE_TITLE" \
-            --body "$ISSUE_BODY" \
-            --assignee "george962"
+          ISSUE_URL="$(
+            gh issue create \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Fear & Greed LOW Alert" \
+              --assignee "george962" \
+              --body "$(cat <<'EOF'
+          This is the permanent issue for low CNN Fear & Greed alerts.
 
-      - name: Update existing low alert
+          New low readings will be added here as comments. The issue may be
+          closed when the index returns to normal and reopened when another
+          low alert occurs.
+          EOF
+          )"
+          )"
+
+          ISSUE_NUMBER="${ISSUE_URL##*/}"
+          echo "number=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Reopen permanent low alert issue
         if: >-
           steps.feargreed.outputs.alert_type == 'low' &&
-          steps.existing-low.outputs.issue_number != ''
+          steps.low-issue.outputs.number != '' &&
+          steps.low-issue.outputs.state == 'CLOSED'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ steps.existing-low.outputs.issue_number }}
+          ISSUE_NUMBER: ${{ steps.low-issue.outputs.number }}
+        run: |
+          gh issue reopen "$ISSUE_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --comment "A new low Fear & Greed alert has been triggered."
+
+      - name: Add current low alert reading
+        if: steps.feargreed.outputs.alert_type == 'low'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXISTING_NUMBER: ${{ steps.low-issue.outputs.number }}
+          CREATED_NUMBER: ${{ steps.create-low.outputs.number }}
           CURRENT_VALUE: ${{ steps.feargreed.outputs.value }}
           CURRENT_RATING: ${{ steps.feargreed.outputs.rating }}
           CURRENT_DATE: ${{ steps.feargreed.outputs.date }}
         run: |
+          ISSUE_NUMBER="$EXISTING_NUMBER"
+
+          if [ -z "$ISSUE_NUMBER" ]; then
+            ISSUE_NUMBER="$CREATED_NUMBER"
+          fi
+
           gh issue comment "$ISSUE_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
-            --body "Still in the low range: **$CURRENT_VALUE** ($CURRENT_RATING) on $CURRENT_DATE."
+            --body "$(cat <<EOF
+          ## Low alert triggered
 
-      - name: Check for existing high alert
+          - **Current value:** $CURRENT_VALUE
+          - **Rating:** $CURRENT_RATING
+          - **Data date:** $CURRENT_DATE
+          - **Low threshold:** 50
+
+          The CNN Fear & Greed Index is at or below the configured low threshold.
+          EOF
+          )"
+
+      # ---------------------------------------------------------
+      # HIGH ALERT
+      # ---------------------------------------------------------
+
+      - name: Find permanent high alert issue
         if: steps.feargreed.outputs.alert_type == 'high'
-        id: existing-high
+        id: high-issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ISSUE_NUMBER="$(
+          ISSUE_DATA="$(
             gh issue list \
               --repo "$GITHUB_REPOSITORY" \
-              --state open \
-              --search '"Fear & Greed HIGH Alert:" in:title' \
-              --json number \
-              --jq '.[0].number // ""'
+              --state all \
+              --search '"Fear & Greed HIGH Alert" in:title' \
+              --json number,title,state \
+              --jq '
+                map(
+                  select(.title == "Fear & Greed HIGH Alert")
+                )[0] // {}
+              '
           )"
 
-          echo "issue_number=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
+          ISSUE_NUMBER="$(
+            echo "$ISSUE_DATA" |
+            jq -r '.number // ""'
+          )"
 
-      - name: Create high alert issue
+          ISSUE_STATE="$(
+            echo "$ISSUE_DATA" |
+            jq -r '.state // ""'
+          )"
+
+          echo "number=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "state=$ISSUE_STATE" >> "$GITHUB_OUTPUT"
+
+      - name: Create permanent high alert issue
         if: >-
           steps.feargreed.outputs.alert_type == 'high' &&
-          steps.existing-high.outputs.issue_number == ''
+          steps.high-issue.outputs.number == ''
+        id: create-high
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_TITLE: ${{ steps.feargreed.outputs.issue_title }}
-          ISSUE_BODY: ${{ steps.feargreed.outputs.issue_body }}
         run: |
-          gh issue create \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "$ISSUE_TITLE" \
-            --body "$ISSUE_BODY" \
-            --assignee "george962"
+          ISSUE_URL="$(
+            gh issue create \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Fear & Greed HIGH Alert" \
+              --assignee "george962" \
+              --body "$(cat <<'EOF'
+          This is the permanent issue for high CNN Fear & Greed alerts.
 
-      - name: Update existing high alert
+          New high readings will be added here as comments. The issue may be
+          closed when the index returns to normal and reopened when another
+          high alert occurs.
+          EOF
+          )"
+          )"
+
+          ISSUE_NUMBER="${ISSUE_URL##*/}"
+          echo "number=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Reopen permanent high alert issue
         if: >-
           steps.feargreed.outputs.alert_type == 'high' &&
-          steps.existing-high.outputs.issue_number != ''
+          steps.high-issue.outputs.number != '' &&
+          steps.high-issue.outputs.state == 'CLOSED'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ steps.existing-high.outputs.issue_number }}
+          ISSUE_NUMBER: ${{ steps.high-issue.outputs.number }}
+        run: |
+          gh issue reopen "$ISSUE_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --comment "A new high Fear & Greed alert has been triggered."
+
+      - name: Add current high alert reading
+        if: steps.feargreed.outputs.alert_type == 'high'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXISTING_NUMBER: ${{ steps.high-issue.outputs.number }}
+          CREATED_NUMBER: ${{ steps.create-high.outputs.number }}
           CURRENT_VALUE: ${{ steps.feargreed.outputs.value }}
           CURRENT_RATING: ${{ steps.feargreed.outputs.rating }}
           CURRENT_DATE: ${{ steps.feargreed.outputs.date }}
         run: |
+          ISSUE_NUMBER="$EXISTING_NUMBER"
+
+          if [ -z "$ISSUE_NUMBER" ]; then
+            ISSUE_NUMBER="$CREATED_NUMBER"
+          fi
+
           gh issue comment "$ISSUE_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
-            --body "Still in the high range: **$CURRENT_VALUE** ($CURRENT_RATING) on $CURRENT_DATE."
+            --body "$(cat <<EOF
+          ## High alert triggered
 
-      - name: Close old alert issues after returning to normal
+          - **Current value:** $CURRENT_VALUE
+          - **Rating:** $CURRENT_RATING
+          - **Data date:** $CURRENT_DATE
+          - **High threshold:** 75
+
+          The CNN Fear & Greed Index is at or above the configured high threshold.
+          EOF
+          )"
+
+      # ---------------------------------------------------------
+      # NORMAL RANGE
+      # ---------------------------------------------------------
+
+      - name: Close alert issues after returning to normal
         if: steps.feargreed.outputs.alert_type == 'normal'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CURRENT_VALUE: ${{ steps.feargreed.outputs.value }}
+          CURRENT_RATING: ${{ steps.feargreed.outputs.rating }}
           CURRENT_DATE: ${{ steps.feargreed.outputs.date }}
         run: |
-          gh issue list \
-            --repo "$GITHUB_REPOSITORY" \
-            --state open \
-            --search '"Fear & Greed LOW Alert:" in:title' \
-            --json number \
-            --jq '.[].number' |
-          while read -r ISSUE_NUMBER; do
-            if [ -n "$ISSUE_NUMBER" ]; then
-              gh issue close "$ISSUE_NUMBER" \
-                --repo "$GITHUB_REPOSITORY" \
-                --comment "Index returned to the normal range at **$CURRENT_VALUE** on $CURRENT_DATE."
-            fi
-          done
+          LOW_ISSUE="$(
+            gh issue list \
+              --repo "$GITHUB_REPOSITORY" \
+              --state open \
+              --search '"Fear & Greed LOW Alert" in:title' \
+              --json number,title \
+              --jq '
+                map(
+                  select(.title == "Fear & Greed LOW Alert")
+                )[0].number // ""
+              '
+          )"
 
-          gh issue list \
-            --repo "$GITHUB_REPOSITORY" \
-            --state open \
-            --search '"Fear & Greed HIGH Alert:" in:title' \
-            --json number \
-            --jq '.[].number' |
-          while read -r ISSUE_NUMBER; do
-            if [ -n "$ISSUE_NUMBER" ]; then
-              gh issue close "$ISSUE_NUMBER" \
-                --repo "$GITHUB_REPOSITORY" \
-                --comment "Index returned to the normal range at **$CURRENT_VALUE** on $CURRENT_DATE."
-            fi
-          done
+          if [ -n "$LOW_ISSUE" ]; then
+            gh issue close "$LOW_ISSUE" \
+              --repo "$GITHUB_REPOSITORY" \
+              --comment "$(cat <<EOF
+          Index returned to the normal range.
+
+          - **Current value:** $CURRENT_VALUE
+          - **Rating:** $CURRENT_RATING
+          - **Data date:** $CURRENT_DATE
+          EOF
+          )"
+          fi
+
+          HIGH_ISSUE="$(
+            gh issue list \
+              --repo "$GITHUB_REPOSITORY" \
+              --state open \
+              --search '"Fear & Greed HIGH Alert" in:title' \
+              --json number,title \
+              --jq '
+                map(
+                  select(.title == "Fear & Greed HIGH Alert")
+                )[0].number // ""
+              '
+          )"
+
+          if [ -n "$HIGH_ISSUE" ]; then
+            gh issue close "$HIGH_ISSUE" \
+              --repo "$GITHUB_REPOSITORY" \
+              --comment "$(cat <<EOF
+          Index returned to the normal range.
+
+          - **Current value:** $CURRENT_VALUE
+          - **Rating:** $CURRENT_RATING
+          - **Data date:** $CURRENT_DATE
+          EOF
+          )"
+          fi
