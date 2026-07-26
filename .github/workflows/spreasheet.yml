@@ -35,4 +35,4 @@ jobs:
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           GOOGLE_SPREADSHEET_NAME: FearAndGreed
           GOOGLE_WORKSHEET_NAME: Sheet1
-        run: python FearGreed.py --update-sheet
+        run: python FearGreed.py --update-sheet --append-unchanged

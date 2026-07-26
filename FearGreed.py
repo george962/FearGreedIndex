@@ -255,24 +255,25 @@ def update_google_sheet(
         ) from error
 
     existing_rows = worksheet.get_all_values()
+    display_value = int(value + 0.5)
 
     if not append_unchanged and existing_rows:
         last_row = existing_rows[-1]
         if len(last_row) >= 2:
             try:
-                last_value = float(last_row[1])
+                last_value = int(float(last_row[1]) + 0.5)
             except (TypeError, ValueError):
                 last_value = None
 
-            if last_value == value:
+            if last_value == display_value:
                 print(
-                    f"Google Sheet unchanged: latest recorded value is {value:g}"
+                    "Google Sheet unchanged: latest recorded whole-number "
+                    f"value is {display_value}"
                 )
                 return False
 
     checked_at = checked_time.strftime("%Y-%m-%d %H:%M:%S")
     site_updated = format_age(source_time, checked_time)
-    display_value: int | float = int(value) if value.is_integer() else value
 
     worksheet.append_row(
         [checked_at, display_value, site_updated],
