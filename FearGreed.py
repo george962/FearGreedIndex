@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import ssl
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -113,17 +114,23 @@ def determine_alert_type(
 
 
 def write_github_output(name: str, value: str) -> None:
-    """Write a step output when running inside GitHub Actions."""
+    """Write a single-line or multiline GitHub Actions output."""
     output_file = os.environ.get("GITHUB_OUTPUT")
 
     if not output_file:
         return
 
-    with Path(output_file).open(
-        "a",
-        encoding="utf-8",
-    ) as file:
-        file.write(f"{name}={value}\n")
+    output_path = Path(output_file)
+
+    with output_path.open("a", encoding="utf-8") as file:
+        if "\n" in value or "\r" in value:
+            delimiter = f"EOF_{uuid.uuid4().hex}"
+            file.write(f"{name}<<{delimiter}\n")
+            file.write(value)
+            file.write("\n")
+            file.write(f"{delimiter}\n")
+        else:
+            file.write(f"{name}={value}\n")
 
 
 def set_github_outputs(
