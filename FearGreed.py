@@ -38,12 +38,6 @@ DEFAULT_HIGH_THRESHOLD = 75.0
 DEFAULT_SPREADSHEET = "FearAndGreed"
 DEFAULT_WORKSHEET = "Sheet1"
 
-# TradingView webhook helper cells in the Google Sheet.
-TRADINGVIEW_PRICE_CELL = "F1"
-TRADINGVIEW_TIMESTAMP_CELL = "G1"
-TRADINGVIEW_SYMBOL_CELL = "H1"
-TRADINGVIEW_RECEIVED_CELL = "I1"
-
 
 def fetch_latest(timeout: int = 30) -> dict[str, Any]:
     """Fetch the current index record from CNN's JSON feed."""
@@ -117,6 +111,7 @@ def write_github_output(name: str, value: str) -> None:
         return
 
     output_path = Path(output_file)
+
     with output_path.open("a", encoding="utf-8") as file:
         if "\n" in value or "\r" in value:
             delimiter = f"EOF_{uuid.uuid4().hex}"
@@ -226,57 +221,17 @@ def format_age(
         return f"{minutes} minutes ago"
 
     hours = minutes // 60
+
     if hours == 1:
         return "1 hour ago"
     if hours < 24:
         return f"{hours} hours ago"
 
     days = hours // 24
+
     if days == 1:
         return "1 day ago"
     return f"{days} days ago"
-
-
-def read_tradingview_snapshot(
-    worksheet: Any,
-) -> tuple[float, str, str, str]:
-    """Read the latest TradingView snapshot from helper cells F1:I1."""
-    values = worksheet.get(
-        f"{TRADINGVIEW_PRICE_CELL}:{TRADINGVIEW_RECEIVED_CELL}",
-        value_render_option="UNFORMATTED_VALUE",
-    )
-
-    row = values[0] if values else []
-    while len(row) < 4:
-        row.append("")
-
-    raw_price, raw_timestamp, raw_symbol, raw_received = row[:4]
-
-    if raw_price in ("", None):
-        raise RuntimeError(
-            "TradingView price is missing from "
-            f"{TRADINGVIEW_PRICE_CELL}"
-        )
-
-    try:
-        price = float(raw_price)
-    except (TypeError, ValueError) as error:
-        raise RuntimeError(
-            f"TradingView price in {TRADINGVIEW_PRICE_CELL} "
-            f"is not numeric: {raw_price!r}"
-        ) from error
-
-    if price <= 0:
-        raise RuntimeError(
-            f"TradingView price in {TRADINGVIEW_PRICE_CELL} "
-            "must be greater than zero"
-        )
-
-    timestamp = str(raw_timestamp or "").strip()
-    symbol = str(raw_symbol or "").strip()
-    received = str(raw_received or "").strip()
-
-    return price, timestamp, symbol, received
 
 
 def update_google_sheet(
@@ -286,8 +241,8 @@ def update_google_sheet(
     spreadsheet_name: str,
     worksheet_name: str,
     append_unchanged: bool,
-) -> tuple[bool, dict[str, Any] | None]:
-    """Append Fear & Greed with the latest TradingView SPX snapshot."""
+) -> bool:
+    """Append Fear & Greed data to the existing three-column sheet."""
     try:
         import gspread
         from google.oauth2.service_account import Credentials
@@ -341,14 +296,7 @@ def update_google_sheet(
                     "Google Sheet unchanged: latest recorded "
                     f"whole-number value is {display_value}"
                 )
-                return False, None
-
-    (
-        sp500_price,
-        tradingview_timestamp,
-        tradingview_symbol,
-        tradingview_received,
-    ) = read_tradingview_snapshot(worksheet)
+                return False
 
     checked_at = checked_time.strftime("%Y-%m-%d %H:%M:%S")
     site_updated = format_age(source_time, checked_time)
@@ -358,25 +306,17 @@ def update_google_sheet(
             checked_at,
             display_value,
             site_updated,
-            round(sp500_price, 2),
         ],
         value_input_option="USER_ENTERED",
     )
 
     print(
-        f'Appended Fear & Greed {display_value} and TradingView '
-        f'S&P 500 {sp500_price:.2f} to "{spreadsheet_name}" / '
-        f'"{worksheet_name}" ({site_updated})'
+        f'Appended Fear & Greed {display_value} to '
+        f'"{spreadsheet_name}" / "{worksheet_name}" '
+        f'({site_updated})'
     )
 
-    snapshot = {
-        "sp500_price": round(sp500_price, 2),
-        "tradingview_timestamp": tradingview_timestamp or None,
-        "tradingview_symbol": tradingview_symbol or None,
-        "tradingview_received": tradingview_received or None,
-    }
-
-    return True, snapshot
+    return True
 
 
 def parse_args() -> argparse.Namespace:
@@ -441,6 +381,7 @@ def main() -> int:
         data_date, value, rating, source_time = parse_record(
             fetch_latest(args.timeout)
         )
+
         alert_type = determine_alert_type(
             value,
             args.low,
@@ -463,10 +404,9 @@ def main() -> int:
             )
 
         sheet_updated = False
-        tradingview_snapshot = None
 
         if args.update_sheet:
-            sheet_updated, tradingview_snapshot = update_google_sheet(
+            sheet_updated = update_google_sheet(
                 checked_time=checked_time,
                 source_time=source_time,
                 value=value,
@@ -490,9 +430,6 @@ def main() -> int:
         "sheet_updated": sheet_updated,
     }
 
-    if tradingview_snapshot is not None:
-        result.update(tradingview_snapshot)
-
     if args.json:
         print(json.dumps(result))
     else:
@@ -501,12 +438,6 @@ def main() -> int:
             f"{value:g} ({label}, {data_date})"
         )
         print(f"Alert status: {alert_type}")
-
-        if tradingview_snapshot is not None:
-            print(
-                "TradingView S&P 500: "
-                f"{tradingview_snapshot['sp500_price']:.2f}"
-            )
 
     return 0
 
