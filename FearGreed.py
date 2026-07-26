@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch the latest CNN Fear & Greed Index for GitHub Actions."""
+"""Fetch CNN Fear & Greed data for GitHub Actions and Google Sheets."""
 
 from __future__ import annotations
 
@@ -8,14 +8,13 @@ import json
 import os
 import ssl
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 import certifi
-
 
 DATA_URL = (
     "https://production.dataviz.cnn.io/index/"
@@ -35,6 +34,15 @@ HEADERS = {
 
 DEFAULT_LOW_THRESHOLD = 25.0
 DEFAULT_HIGH_THRESHOLD = 75.0
+DEFAULT_SPREADSHEET = "FearAndGreed"
+DEFAULT_WORKSHEET = "Sheet1"
+SHEET_HEADERS = [
+    "CheckedAtUTC",
+    "DataDate",
+    "Value",
+    "Rating",
+    "AlertType",
+]
 
 
 def fetch_latest(timeout: int = 30) -> dict[str, Any]:
@@ -43,59 +51,41 @@ def fetch_latest(timeout: int = 30) -> dict[str, Any]:
     ssl_context = ssl.create_default_context(cafile=certifi.where())
 
     try:
-        with urlopen(
-            request,
-            timeout=timeout,
-            context=ssl_context,
-        ) as response:
+        with urlopen(request, timeout=timeout, context=ssl_context) as response:
             payload = json.load(response)
     except HTTPError as error:
         raise RuntimeError(
             f"CNN returned HTTP {error.code} ({error.reason})"
         ) from error
     except URLError as error:
-        raise RuntimeError(
-            f"Could not reach CNN: {error.reason}"
-        ) from error
+        raise RuntimeError(f"Could not reach CNN: {error.reason}") from error
     except json.JSONDecodeError as error:
-        raise RuntimeError(
-            "CNN returned invalid JSON"
-        ) from error
+        raise RuntimeError("CNN returned invalid JSON") from error
 
     record = payload.get("fear_and_greed")
-
     if not isinstance(record, dict):
-        raise RuntimeError(
-            "CNN response is missing fear_and_greed"
-        )
+        raise RuntimeError("CNN response is missing fear_and_greed")
 
     return record
 
 
-def parse_record(
-    record: dict[str, Any],
-) -> tuple[str, float, str]:
-    """Return date, score, and rating from a CNN index record."""
+def parse_record(record: dict[str, Any]) -> tuple[str, float, str]:
+    """Return data date, score, and rating from a CNN index record."""
     try:
         score = float(record["score"])
         timestamp = str(record["timestamp"])
     except (KeyError, TypeError, ValueError) as error:
-        raise ValueError(
-            "CNN returned an unexpected data format"
-        ) from error
+        raise ValueError("CNN returned an unexpected data format") from error
 
     try:
-        date = datetime.fromisoformat(
+        data_date = datetime.fromisoformat(
             timestamp.replace("Z", "+00:00")
         ).date().isoformat()
     except ValueError as error:
-        raise ValueError(
-            "CNN returned an invalid timestamp"
-        ) from error
+        raise ValueError("CNN returned an invalid timestamp") from error
 
     rating = str(record.get("rating", "")).strip()
-
-    return date, score, rating
+    return data_date, score, rating
 
 
 def determine_alert_type(
@@ -106,22 +96,18 @@ def determine_alert_type(
     """Return low, high, or normal."""
     if value <= low_threshold:
         return "low"
-
     if value >= high_threshold:
         return "high"
-
     return "normal"
 
 
 def write_github_output(name: str, value: str) -> None:
     """Write a single-line or multiline GitHub Actions output."""
     output_file = os.environ.get("GITHUB_OUTPUT")
-
     if not output_file:
         return
 
     output_path = Path(output_file)
-
     with output_path.open("a", encoding="utf-8") as file:
         if "\n" in value or "\r" in value:
             delimiter = f"EOF_{uuid.uuid4().hex}"
@@ -134,7 +120,7 @@ def write_github_output(name: str, value: str) -> None:
 
 
 def set_github_outputs(
-    date: str,
+    data_date: str,
     value: float,
     rating: str,
     alert_type: str,
@@ -147,20 +133,18 @@ def set_github_outputs(
     if alert_type == "low":
         title = f"Fear & Greed LOW Alert: {value:g}"
         condition = (
-            f"The index is at or below the low threshold "
-            f"of {low_threshold:g}."
+            f"The index is at or below the low threshold of "
+            f"{low_threshold:g}."
         )
     elif alert_type == "high":
         title = f"Fear & Greed HIGH Alert: {value:g}"
         condition = (
-            f"The index is at or above the high threshold "
-            f"of {high_threshold:g}."
+            f"The index is at or above the high threshold of "
+            f"{high_threshold:g}."
         )
     else:
         title = f"Fear & Greed Normal: {value:g}"
-        condition = (
-            "The index is currently inside the normal range."
-        )
+        condition = "The index is currently inside the normal range."
 
     issue_body = "\n".join(
         [
@@ -169,75 +153,145 @@ def set_github_outputs(
             "",
             f"- **Current value:** {value:g}",
             f"- **Rating:** {label}",
-            f"- **Data date:** {date}",
+            f"- **Data date:** {data_date}",
             f"- **Low threshold:** {low_threshold:g}",
             f"- **High threshold:** {high_threshold:g}",
             "",
             condition,
             "",
-            (
-                "This issue was created automatically "
-                "by GitHub Actions."
-            ),
+            "This issue was created automatically by GitHub Actions.",
         ]
     )
 
     write_github_output("alert_type", alert_type)
-    write_github_output("date", date)
+    write_github_output("date", data_date)
     write_github_output("value", f"{value:g}")
     write_github_output("rating", label)
     write_github_output("issue_title", title)
     write_github_output("issue_body", issue_body)
 
 
+def load_service_account_info() -> dict[str, Any]:
+    """Load Google service-account credentials from a GitHub secret."""
+    raw_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+    if not raw_json:
+        raise RuntimeError(
+            "GOOGLE_SERVICE_ACCOUNT_JSON environment variable is missing"
+        )
+
+    try:
+        info = json.loads(raw_json)
+    except json.JSONDecodeError as error:
+        raise RuntimeError(
+            "GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON"
+        ) from error
+
+    if not isinstance(info, dict):
+        raise RuntimeError("Google service-account JSON must be an object")
+
+    return info
+
+
+def update_google_sheet(
+    checked_at_utc: str,
+    data_date: str,
+    value: float,
+    rating: str,
+    alert_type: str,
+    spreadsheet_name: str,
+    worksheet_name: str,
+    append_unchanged: bool,
+) -> bool:
+    """Append the latest reading to Google Sheets; return True if appended."""
+    try:
+        import gspread
+        from google.oauth2.service_account import Credentials
+    except ImportError as error:
+        raise RuntimeError(
+            "Google Sheets packages are missing; install gspread and google-auth"
+        ) from error
+
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+    credentials = Credentials.from_service_account_info(
+        load_service_account_info(),
+        scopes=scopes,
+    )
+    client = gspread.authorize(credentials)
+
+    try:
+        spreadsheet = client.open(spreadsheet_name)
+    except gspread.SpreadsheetNotFound as error:
+        raise RuntimeError(
+            f'Google Sheet "{spreadsheet_name}" was not found or not shared '
+            "with the service account"
+        ) from error
+
+    try:
+        worksheet = spreadsheet.worksheet(worksheet_name)
+    except gspread.WorksheetNotFound as error:
+        raise RuntimeError(
+            f'Worksheet "{worksheet_name}" was not found in '
+            f'"{spreadsheet_name}"'
+        ) from error
+
+    existing_rows = worksheet.get_all_values()
+    if not existing_rows:
+        worksheet.append_row(SHEET_HEADERS, value_input_option="RAW")
+        existing_rows = [SHEET_HEADERS]
+    elif existing_rows[0] != SHEET_HEADERS:
+        raise RuntimeError(
+            "The first Google Sheet row does not match the expected headers: "
+            + ", ".join(SHEET_HEADERS)
+        )
+
+    if not append_unchanged and len(existing_rows) > 1:
+        last_row = existing_rows[-1]
+        if len(last_row) >= 3:
+            try:
+                last_value = float(last_row[2])
+            except ValueError:
+                last_value = None
+            if last_value == value:
+                print(
+                    f"Google Sheet unchanged: latest recorded value is {value:g}"
+                )
+                return False
+
+    label = rating.replace("_", " ").title() or "Unknown"
+    worksheet.append_row(
+        [checked_at_utc, data_date, value, label, alert_type],
+        value_input_option="USER_ENTERED",
+    )
+    print(
+        f'Appended {value:g} ({label}) to "{spreadsheet_name}" / '
+        f'"{worksheet_name}"'
+    )
+    return True
+
+
 def parse_args() -> argparse.Namespace:
     """Parse command-line options."""
     parser = argparse.ArgumentParser(
-        description=(
-            "Get the latest CNN Fear & Greed Index "
-            "and expose the result to GitHub Actions."
-        )
+        description="Get CNN Fear & Greed data for alerts or Google Sheets."
     )
-
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--github-output", action="store_true")
+    parser.add_argument("--update-sheet", action="store_true")
+    parser.add_argument("--append-unchanged", action="store_true")
+    parser.add_argument("--timeout", type=int, default=30)
+    parser.add_argument("--low", type=float, default=DEFAULT_LOW_THRESHOLD)
+    parser.add_argument("--high", type=float, default=DEFAULT_HIGH_THRESHOLD)
     parser.add_argument(
-        "--json",
-        action="store_true",
-        help="print machine-readable JSON",
+        "--spreadsheet",
+        default=os.environ.get("GOOGLE_SPREADSHEET_NAME", DEFAULT_SPREADSHEET),
     )
-
     parser.add_argument(
-        "--github-output",
-        action="store_true",
-        help="write values to the GitHub Actions output file",
+        "--worksheet",
+        default=os.environ.get("GOOGLE_WORKSHEET_NAME", DEFAULT_WORKSHEET),
     )
-
-    parser.add_argument(
-        "--timeout",
-        type=int,
-        default=30,
-        help="HTTP timeout in seconds (default: 30)",
-    )
-
-    parser.add_argument(
-        "--low",
-        type=float,
-        default=DEFAULT_LOW_THRESHOLD,
-        help=(
-            "low alert threshold "
-            f"(default: {DEFAULT_LOW_THRESHOLD:g})"
-        ),
-    )
-
-    parser.add_argument(
-        "--high",
-        type=float,
-        default=DEFAULT_HIGH_THRESHOLD,
-        help=(
-            "high alert threshold "
-            f"(default: {DEFAULT_HIGH_THRESHOLD:g})"
-        ),
-    )
-
     return parser.parse_args()
 
 
@@ -248,67 +302,63 @@ def main() -> int:
     if args.timeout <= 0:
         print("Error: --timeout must be greater than zero")
         return 2
-
     if not 0 <= args.low <= 100:
         print("Error: --low must be between 0 and 100")
         return 2
-
     if not 0 <= args.high <= 100:
         print("Error: --high must be between 0 and 100")
         return 2
-
     if args.low >= args.high:
         print("Error: --low must be lower than --high")
         return 2
 
     try:
-        date, value, rating = parse_record(
-            fetch_latest(args.timeout)
-        )
-    except (RuntimeError, ValueError) as error:
-        print(f"Error: {error}")
-        return 1
+        data_date, value, rating = parse_record(fetch_latest(args.timeout))
+        alert_type = determine_alert_type(value, args.low, args.high)
+        checked_at_utc = datetime.now(timezone.utc).replace(
+            microsecond=0
+        ).isoformat()
 
-    alert_type = determine_alert_type(
-        value=value,
-        low_threshold=args.low,
-        high_threshold=args.high,
-    )
-
-    label = rating.replace("_", " ").title() or "Unknown"
-
-    if args.github_output:
-        try:
+        if args.github_output:
             set_github_outputs(
-                date=date,
+                data_date,
+                value,
+                rating,
+                alert_type,
+                args.low,
+                args.high,
+            )
+
+        sheet_updated = False
+        if args.update_sheet:
+            sheet_updated = update_google_sheet(
+                checked_at_utc=checked_at_utc,
+                data_date=data_date,
                 value=value,
                 rating=rating,
                 alert_type=alert_type,
-                low_threshold=args.low,
-                high_threshold=args.high,
+                spreadsheet_name=args.spreadsheet,
+                worksheet_name=args.worksheet,
+                append_unchanged=args.append_unchanged,
             )
-        except OSError as error:
-            print(
-                f"Error writing GitHub Actions output: {error}"
-            )
-            return 1
+    except (RuntimeError, ValueError, OSError) as error:
+        print(f"Error: {error}")
+        return 1
 
+    label = rating.replace("_", " ").title() or "Unknown"
     result = {
-        "date": date,
+        "checked_at_utc": checked_at_utc,
+        "date": data_date,
         "value": value,
         "rating": rating,
         "alert_type": alert_type,
-        "low_threshold": args.low,
-        "high_threshold": args.high,
+        "sheet_updated": sheet_updated,
     }
 
     if args.json:
         print(json.dumps(result))
     else:
-        print(
-            f"Fear & Greed Index: "
-            f"{value:g} ({label}, {date})"
-        )
+        print(f"Fear & Greed Index: {value:g} ({label}, {data_date})")
         print(f"Alert status: {alert_type}")
 
     return 0
