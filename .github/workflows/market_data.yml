@@ -1,0 +1,87 @@
+name: Update Fear and Greed SPX Dataset
+
+run-name: Update Fear and Greed SPX Dataset
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - FearGreedMarketData.py
+      - requirements.txt
+      - .github/workflows/market_data.yml
+
+  workflow_dispatch:
+
+  workflow_run:
+    workflows:
+      - Update Daily Fear and Greed CSV
+    types:
+      - completed
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fear-greed-spx-dataset
+  cancel-in-progress: false
+
+jobs:
+  update-market-data:
+    name: Update analysis-ready SPX dataset
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Build Fear and Greed SPX dataset
+        run: |
+          python FearGreedMarketData.py \
+            --fear-greed-input data/fear_greed_daily.csv \
+            --spx-cache data/spx_daily.csv \
+            --output data/fear_greed_spx_daily.csv \
+            --json
+
+      - name: Run market-data tests
+        run: python -m unittest -v test_fear_greed_market_data.py
+
+      - name: Commit changed datasets
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- \
+            data/spx_daily.csv \
+            data/fear_greed_spx_daily.csv; then
+            echo "SPX datasets are already current."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add \
+            data/spx_daily.csv \
+            data/fear_greed_spx_daily.csv
+          git commit -m "Update Fear and Greed SPX dataset"
+          git pull --rebase origin main
+          git push origin HEAD:main
