@@ -8,7 +8,7 @@ on:
       - main
 
   schedule:
-    - cron: "3-59/5 * * * *"
+    - cron: "3-59/5 * * * 1-5"
 
 concurrency:
   group: fear-greed-sheet
