@@ -3,9 +3,6 @@ name: CNN Fear and Greed Monitor
 run-name: Check CNN Fear and Greed Index
 
 on:
-  push:
-    branches:
-      - main
 
   schedule:
     # Runs hourly at minute 30, Monday-Friday.
