@@ -396,54 +396,199 @@ def add_features(
 
 
 def merge_signals(daily: pd.DataFrame, market: pd.DataFrame) -> pd.DataFrame:
-    signal = daily.reset_index().rename(columns={"date": "signal_date"})
-    sessions = market.reset_index()
+    """
+    Match each Fear & Greed observation to a market session.
 
-    merged = pd.merge_asof(
-        signal.sort_values("signal_date"),
-        sessions.sort_values("market_date"),
-        left_on="signal_date",
-        right_on="market_date",
-        direction="forward",
-        allow_exact_matches=False,
-    ).dropna(subset=["market_date", "close"])
-
-    merged = merged.sort_values("market_date").reset_index(drop=True)
-    merged["entry_price"] = merged["open"].where(
-        merged["open"].notna(),
-        merged["close"],
+    The sentiment and market repository datasets may share the same date.
+    We match to the same session first, but calculate the simulated entry
+    from the following available market session to avoid look-ahead bias.
+    """
+    signal = (
+        daily.reset_index()
+        .rename(columns={daily.index.name or "index": "signal_date"})
+        .sort_values("signal_date")
     )
 
+    sessions = (
+        market.reset_index()
+        .rename(columns={market.index.name or "index": "market_date"})
+        .sort_values("market_date")
+    )
+
+    signal["signal_date"] = pd.to_datetime(
+        signal["signal_date"],
+        errors="coerce",
+    ).dt.normalize()
+
+    sessions["market_date"] = pd.to_datetime(
+        sessions["market_date"],
+        errors="coerce",
+    ).dt.normalize()
+
+    signal = signal.dropna(subset=["signal_date"])
+    sessions = sessions.dropna(subset=["market_date", "close"])
+
+    if signal.empty:
+        raise RuntimeError("No valid Fear & Greed dates were found.")
+
+    if sessions.empty:
+        raise RuntimeError("No valid market dates or closing prices were found.")
+
+    print(
+        "Fear & Greed coverage:",
+        signal["signal_date"].min(),
+        "through",
+        signal["signal_date"].max(),
+    )
+    print(
+        "Market coverage:",
+        sessions["market_date"].min(),
+        "through",
+        sessions["market_date"].max(),
+    )
+
+    # Match each sentiment date to the most recent available market session.
+    # Exact matches are expected for the combined repository dataset.
+    merged = pd.merge_asof(
+        signal,
+        sessions,
+        left_on="signal_date",
+        right_on="market_date",
+        direction="backward",
+        allow_exact_matches=True,
+    )
+
+    merged = merged.dropna(subset=["market_date", "close"])
+    merged = merged.sort_values("market_date").reset_index(drop=True)
+
+    if merged.empty:
+        raise RuntimeError(
+            "Fear & Greed and market data have no overlapping dates. "
+            f"Fear coverage: {signal['signal_date'].min().date()} through "
+            f"{signal['signal_date'].max().date()}; "
+            f"market coverage: {sessions['market_date'].min().date()} through "
+            f"{sessions['market_date'].max().date()}."
+        )
+
+    market = market.copy().sort_index()
+    market.index = pd.to_datetime(market.index).normalize()
+    market = market[~market.index.duplicated(keep="last")]
+
     positions = {
-        pd.Timestamp(index): position
-        for position, index in enumerate(market.index)
+        pd.Timestamp(market_date): position
+        for position, market_date in enumerate(market.index)
     }
+
+    # The signal is known on the matched date. Enter on the next available
+    # session, using its opening price where available.
+    entry_dates: list[pd.Timestamp | pd.NaT] = []
+    entry_prices: list[float] = []
+    entry_positions: list[int | None] = []
+
+    for row in merged.itertuples():
+        signal_position = positions.get(pd.Timestamp(row.market_date))
+
+        if signal_position is None:
+            entry_dates.append(pd.NaT)
+            entry_prices.append(np.nan)
+            entry_positions.append(None)
+            continue
+
+        next_position = signal_position + 1
+
+        if next_position >= len(market):
+            entry_dates.append(pd.NaT)
+            entry_prices.append(np.nan)
+            entry_positions.append(None)
+            continue
+
+        next_row = market.iloc[next_position]
+        next_date = pd.Timestamp(market.index[next_position])
+
+        open_price = next_row.get("open", np.nan)
+        close_price = next_row.get("close", np.nan)
+
+        price = (
+            float(open_price)
+            if pd.notna(open_price)
+            else float(close_price)
+        )
+
+        entry_dates.append(next_date)
+        entry_prices.append(price)
+        entry_positions.append(next_position)
+
+    merged["entry_date"] = entry_dates
+    merged["entry_price"] = entry_prices
+    merged["_entry_position"] = entry_positions
+    merged = merged.dropna(
+        subset=["entry_date", "entry_price", "_entry_position"]
+    ).copy()
+
+    if merged.empty:
+        raise RuntimeError(
+            "Dates overlap, but no observation has a later market session "
+            "available for entry."
+        )
 
     for horizon in CONFIG["horizons"]:
         outcomes: list[float] = []
+
         for row in merged.itertuples():
-            position = positions.get(pd.Timestamp(row.market_date))
-            target = None if position is None else position + horizon - 1
-            if position is None or target is None or target >= len(market):
+            entry_position = int(row._entry_position)
+
+            # A 1-day outcome uses the entry session's closing price.
+            target_position = entry_position + horizon - 1
+
+            if target_position >= len(market):
                 outcomes.append(np.nan)
-            else:
-                outcomes.append(
-                    float(market["close"].iloc[target] / row.entry_price - 1)
-                )
+                continue
+
+            target_close = market["close"].iloc[target_position]
+
+            if pd.isna(target_close) or not np.isfinite(row.entry_price):
+                outcomes.append(np.nan)
+                continue
+
+            outcomes.append(
+                float(target_close / row.entry_price - 1)
+            )
+
         merged[f"forward_{horizon}d"] = outcomes
 
     drawdowns: list[float] = []
+
     for row in merged.itertuples():
-        position = positions.get(pd.Timestamp(row.market_date))
-        if position is None:
+        entry_position = int(row._entry_position)
+        end_position = min(entry_position + 19, len(market) - 1)
+
+        if "low" in market.columns:
+            future_lows = market["low"].iloc[
+                entry_position : end_position + 1
+            ].dropna()
+        else:
+            future_lows = market["close"].iloc[
+                entry_position : end_position + 1
+            ].dropna()
+
+        if future_lows.empty:
             drawdowns.append(np.nan)
-            continue
-        end = min(position + 19, len(market) - 1)
-        lows = market["low"].iloc[position : end + 1].dropna()
-        drawdowns.append(
-            np.nan if lows.empty else float(lows.min() / row.entry_price - 1)
-        )
+        else:
+            drawdowns.append(
+                float(future_lows.min() / row.entry_price - 1)
+            )
+
     merged["max_drawdown_20d"] = drawdowns
+    merged = merged.drop(columns=["_entry_position"])
+
+    print("Matched sentiment observations:", len(merged))
+    print(
+        "Matched coverage:",
+        merged["signal_date"].min(),
+        "through",
+        merged["signal_date"].max(),
+    )
+
     return merged
 
 
