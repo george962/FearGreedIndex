@@ -1,0 +1,64 @@
+name: Build and deploy market dashboard
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+  schedule:
+    # Runs at 23:30 UTC on weekdays.
+    # This is 5:30 PM Central Standard Time and 6:30 PM Central Daylight Time.
+    - cron: "30 23 * * 1-5"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Optionally refresh Fear & Greed source
+        env:
+          FEAR_GREED_SOURCE_URL: ${{ secrets.FEAR_GREED_SOURCE_URL }}
+        run: python scripts/update_fear_greed.py
+
+      - name: Build dashboard
+        run: python scripts/build_dashboard.py
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

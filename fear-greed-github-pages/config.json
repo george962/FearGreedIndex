@@ -1,0 +1,38 @@
+{
+  "ticker": "SPY",
+  "fear_greed_file": "data/fear_greed.tsv",
+  "daily_aggregation": "last",
+  "market_entry": "next_open",
+  "cooldown_calendar_days": 10,
+  "minimum_action_sample": 8,
+  "refresh_seconds": 300,
+  "horizons": [
+    1,
+    5,
+    10,
+    20,
+    60
+  ],
+  "level_thresholds": [
+    15,
+    20,
+    25,
+    30,
+    35,
+    40,
+    50
+  ],
+  "drop_windows": [
+    1,
+    3,
+    5
+  ],
+  "drop_thresholds": [
+    5,
+    10,
+    15,
+    20
+  ],
+  "analog_level_band": 7,
+  "analog_change_band": 5
+}
