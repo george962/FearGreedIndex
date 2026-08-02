@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timezone
 
 from FearGreed import parse_record
 
@@ -13,7 +14,12 @@ class ParseRecordTests(unittest.TestCase):
 
         self.assertEqual(
             parse_record(record),
-            ("2026-07-24", 39.4285714285714, "fear"),
+            (
+                "2026-07-24",
+                39.4285714285714,
+                "fear",
+                datetime(2026, 7, 24, 23, 59, 54, tzinfo=timezone.utc),
+            ),
         )
 
     def test_accepts_z_timestamp(self):
@@ -25,7 +31,12 @@ class ParseRecordTests(unittest.TestCase):
 
         self.assertEqual(
             parse_record(record),
-            ("2026-07-25", 51.6, "neutral"),
+            (
+                "2026-07-25",
+                51.6,
+                "neutral",
+                datetime(2026, 7, 25, 20, 0, tzinfo=timezone.utc),
+            ),
         )
 
     def test_rejects_unexpected_response(self):

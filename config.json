@@ -34,5 +34,6 @@
     20
   ],
   "analog_level_band": 7,
-  "analog_change_band": 5
+  "analog_change_band": 5,
+  "data_preference": "separate_raw_then_combined_then_yahoo"
 }

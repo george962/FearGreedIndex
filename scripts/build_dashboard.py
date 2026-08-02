@@ -24,7 +24,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-import yfinance as yf
+try:
+    import yfinance as yf
+except ImportError:  # Only needed for the final market-data fallback.
+    yf = None
 from jinja2 import Template
 
 
@@ -146,70 +149,55 @@ def detect_date_column(frame: pd.DataFrame) -> str:
 
 
 def parse_combined_dataset(path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Parse the repository's analysis-ready combined dataset explicitly."""
     frame = read_csv_flexible(path)
-    date_column = detect_date_column(frame)
 
-    fear_column = find_column(
-        frame,
+    required = {
+        "fear_greed_date_utc",
+        "fear_greed_value",
+        "spx_date",
+        "spx_open",
+        "spx_high",
+        "spx_low",
+        "spx_close",
+    }
+    missing = sorted(required - set(frame.columns))
+    if missing:
+        raise ValueError(
+            f"Combined dataset is missing required columns: {', '.join(missing)}"
+        )
+
+    daily = pd.DataFrame(
         {
-            "fear_greed",
-            "fear_and_greed",
-            "fear_greed_index",
-            "feargreed",
-            "feargreedindex",
-            "value",
-            "score",
-            "index_value",
-        },
-        contains_any=("fear", "greed"),
-        numeric_range=(0, 100),
-        excluded={date_column},
-    )
-
-    market_column = find_column(
-        frame,
-        {
-            "spx_close",
-            "sp500_close",
-            "s_p_500_close",
-            "sp_500_close",
-            "close",
-            "adj_close",
-            "adjusted_close",
-            "market_close",
-        },
-        contains_any=("spx", "sp500", "s_p_500", "close"),
-        excluded={date_column, fear_column} if fear_column else {date_column},
-    )
-
-    if fear_column is None:
-        raise ValueError(f"Could not identify Fear & Greed column in {path}.")
-    if market_column is None:
-        raise ValueError(f"Could not identify S&P 500 close column in {path}.")
-
-    dates = pd.to_datetime(frame[date_column], errors="coerce").dt.normalize()
-    fear = pd.to_numeric(frame[fear_column], errors="coerce")
-    market_close = pd.to_numeric(frame[market_column], errors="coerce")
-
-    combined = pd.DataFrame(
-        {
-            "date": dates,
-            "fear_greed": fear,
-            "close": market_close,
+            "date": pd.to_datetime(
+                frame["fear_greed_date_utc"], errors="coerce"
+            ).dt.normalize(),
+            "fear_greed": pd.to_numeric(
+                frame["fear_greed_value"], errors="coerce"
+            ),
         }
-    ).dropna(subset=["date", "fear_greed", "close"])
+    ).dropna(subset=["date", "fear_greed"])
+    daily = daily[daily["fear_greed"].between(0, 100)]
+    daily = daily.sort_values("date").drop_duplicates("date", keep="last")
+    daily = daily.set_index("date")[["fear_greed"]]
 
-    combined = combined[combined["fear_greed"].between(0, 100)]
-    combined = combined.sort_values("date").drop_duplicates("date", keep="last")
+    market = pd.DataFrame(
+        {
+            "market_date": pd.to_datetime(
+                frame["spx_date"], errors="coerce"
+            ).dt.normalize(),
+            "open": pd.to_numeric(frame["spx_open"], errors="coerce"),
+            "high": pd.to_numeric(frame["spx_high"], errors="coerce"),
+            "low": pd.to_numeric(frame["spx_low"], errors="coerce"),
+            "close": pd.to_numeric(frame["spx_close"], errors="coerce"),
+        }
+    ).dropna(subset=["market_date", "close"])
+    market = market.sort_values("market_date").drop_duplicates(
+        "market_date", keep="last"
+    )
+    market = market.set_index("market_date")
 
-    daily = combined.set_index("date")[["fear_greed"]]
-    market = combined.set_index("date")[["close"]]
-    market.index.name = "market_date"
-    market["open"] = market["close"]
-    market["high"] = market["close"]
-    market["low"] = market["close"]
-    return daily, market
-
+    return daily, market[["open", "high", "low", "close"]]
 
 def parse_fear_dataset(path: Path) -> pd.DataFrame:
     frame = read_csv_flexible(path)
@@ -247,8 +235,9 @@ def parse_fear_dataset(path: Path) -> pd.DataFrame:
 
 
 def parse_market_dataset(path: Path) -> pd.DataFrame:
+    """Parse the repository SPX cache while preserving actual OHLC prices."""
     frame = read_csv_flexible(path)
-    date_column = detect_date_column(frame)
+    date_column = "date" if "date" in frame.columns else detect_date_column(frame)
 
     close_column = find_column(
         frame,
@@ -262,34 +251,36 @@ def parse_market_dataset(path: Path) -> pd.DataFrame:
             "adjusted_close",
             "market_close",
         },
-        contains_any=("close", "spx", "sp500"),
+        contains_any=("close",),
         excluded={date_column},
     )
     if close_column is None:
         raise ValueError(f"Could not identify close column in {path}.")
 
+    def numeric_column(name: str, fallback: str) -> pd.Series:
+        source = name if name in frame.columns else fallback
+        return pd.to_numeric(frame[source], errors="coerce")
+
     market = pd.DataFrame(
         {
             "market_date": pd.to_datetime(
-                frame[date_column],
-                errors="coerce",
+                frame[date_column], errors="coerce"
             ).dt.normalize(),
+            "open": numeric_column("open", close_column),
+            "high": numeric_column("high", close_column),
+            "low": numeric_column("low", close_column),
             "close": pd.to_numeric(frame[close_column], errors="coerce"),
         }
     ).dropna(subset=["market_date", "close"])
 
     market = market.sort_values("market_date").drop_duplicates(
-        "market_date",
-        keep="last",
+        "market_date", keep="last"
     )
-    market = market.set_index("market_date")
-    market["open"] = market["close"]
-    market["high"] = market["close"]
-    market["low"] = market["close"]
-    return market[["open", "high", "low", "close"]]
-
+    return market.set_index("market_date")[["open", "high", "low", "close"]]
 
 def download_market(start: pd.Timestamp) -> pd.DataFrame:
+    if yf is None:
+        raise RuntimeError("yfinance is required only when repository market data is unavailable.")
     ticker = CONFIG["fallback_ticker"]
     raw = yf.download(
         ticker,
@@ -337,18 +328,28 @@ def download_market(start: pd.Timestamp) -> pd.DataFrame:
 
 
 def load_data() -> tuple[pd.DataFrame, pd.DataFrame, str]:
+    """Load raw repository histories first; use combined/Yahoo only as fallbacks."""
     combined_path = ROOT / CONFIG["combined_dataset"]
     fear_path = ROOT / CONFIG["fear_greed_dataset"]
     market_path = ROOT / CONFIG["market_dataset"]
 
-    combined_error: Exception | None = None
+    if fear_path.exists() and market_path.exists():
+        try:
+            daily = parse_fear_dataset(fear_path)
+            market = parse_market_dataset(market_path)
+            return (
+                daily,
+                market,
+                f"{fear_path.relative_to(ROOT)} + {market_path.relative_to(ROOT)}",
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"Separate repository datasets could not be used: {exc}")
 
     if combined_path.exists():
         try:
             daily, market = parse_combined_dataset(combined_path)
             return daily, market, str(combined_path.relative_to(ROOT))
         except Exception as exc:  # noqa: BLE001
-            combined_error = exc
             print(f"Combined dataset could not be used: {exc}")
 
     if not fear_path.exists():
@@ -357,25 +358,8 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame, str]:
         )
 
     daily = parse_fear_dataset(fear_path)
-
-    if market_path.exists():
-        try:
-            market = parse_market_dataset(market_path)
-            return (
-                daily,
-                market,
-                f"{fear_path.relative_to(ROOT)} + {market_path.relative_to(ROOT)}",
-            )
-        except Exception as exc:  # noqa: BLE001
-            print(f"Repository market dataset could not be used: {exc}")
-
     market = download_market(daily.index.min())
-    source = f"{fear_path.relative_to(ROOT)} + Yahoo Finance fallback"
-
-    if combined_error:
-        source += " (combined parser fallback used)"
-    return daily, market, source
-
+    return daily, market, f"{fear_path.relative_to(ROOT)} + Yahoo Finance fallback"
 
 def add_features(
     daily: pd.DataFrame,
@@ -520,9 +504,9 @@ def merge_signals(daily: pd.DataFrame, market: pd.DataFrame) -> pd.DataFrame:
 
     merged["entry_date"] = entry_dates
     merged["entry_price"] = entry_prices
-    merged["_entry_position"] = entry_positions
+    merged["entry_position_internal"] = entry_positions
     merged = merged.dropna(
-        subset=["entry_date", "entry_price", "_entry_position"]
+        subset=["entry_date", "entry_price", "entry_position_internal"]
     ).copy()
 
     if merged.empty:
@@ -535,7 +519,7 @@ def merge_signals(daily: pd.DataFrame, market: pd.DataFrame) -> pd.DataFrame:
         outcomes: list[float] = []
 
         for row in merged.itertuples():
-            entry_position = int(row._entry_position)
+            entry_position = int(row.entry_position_internal)
 
             # A 1-day outcome uses the entry session's closing price.
             target_position = entry_position + horizon - 1
@@ -559,7 +543,7 @@ def merge_signals(daily: pd.DataFrame, market: pd.DataFrame) -> pd.DataFrame:
     drawdowns: list[float] = []
 
     for row in merged.itertuples():
-        entry_position = int(row._entry_position)
+        entry_position = int(row.entry_position_internal)
         end_position = min(entry_position + 19, len(market) - 1)
 
         if "low" in market.columns:
@@ -579,7 +563,7 @@ def merge_signals(daily: pd.DataFrame, market: pd.DataFrame) -> pd.DataFrame:
             )
 
     merged["max_drawdown_20d"] = drawdowns
-    merged = merged.drop(columns=["_entry_position"])
+    merged = merged.drop(columns=["entry_position_internal"])
 
     print("Matched sentiment observations:", len(merged))
     print(
@@ -658,16 +642,16 @@ def find_analogs(
             float(current_change) - change_band,
             float(current_change) + change_band,
         )
-        strict = complete[level_mask & change_mask]
+        strict = cooldown(complete, level_mask & change_mask)
         if len(strict) >= minimum:
             return strict, (
                 f"Fear & Greed ±{level_band:g} and "
                 f"five-observation change ±{change_band:g}"
             )
 
-    level_only = complete[level_mask]
+    level_only = cooldown(complete, level_mask)
     if len(level_only) >= minimum:
-        return level_only, f"Fear & Greed level ±{level_band:g}"
+        return level_only, f"Fear & Greed level ±{level_band:g} with cooldown"
 
     level_scale = max(float(complete["fear_greed"].std(ddof=0)), 1.0)
     distance = ((complete["fear_greed"] - current_level) / level_scale).abs()
@@ -678,11 +662,21 @@ def find_analogs(
             (complete["fg_change_5d"] - float(current_change)) / change_scale
         ).abs().fillna(1.0)
 
-    nearest = complete.assign(_distance=distance).nsmallest(
-        min(max(minimum, 20), len(complete)),
-        "_distance",
-    )
-    return nearest.drop(columns="_distance"), "nearest historical observations"
+    ranked = complete.assign(_distance=distance).sort_values("_distance")
+    selected_indices: list[int] = []
+    selected_dates: list[pd.Timestamp] = []
+    cooldown_days = int(CONFIG["cooldown_calendar_days"])
+
+    for index, row in ranked.iterrows():
+        current_date = pd.Timestamp(row["signal_date"])
+        if all(abs((current_date - prior).days) >= cooldown_days for prior in selected_dates):
+            selected_indices.append(index)
+            selected_dates.append(current_date)
+        if len(selected_indices) >= max(minimum, 20):
+            break
+
+    nearest = complete.loc[selected_indices].copy()
+    return nearest, "nearest independent historical observations"
 
 
 def action_summary(

@@ -14,11 +14,6 @@ on:
 
   workflow_dispatch:
 
-  schedule:
-    # Monday-Friday evening in U.S. Eastern time.
-    # 9:15 PM EDT / 8:15 PM EST.
-    # GitHub Actions cron schedules use UTC, so this runs Tuesday-Saturday.
-    - cron: "15 1 * * 2-6"
 
   workflow_run:
     workflows:
