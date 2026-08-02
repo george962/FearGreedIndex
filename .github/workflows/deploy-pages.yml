@@ -2,7 +2,8 @@ name: Build and deploy market dashboard
 
 on:
   push:
-    branches: ["main"]
+    branches:
+      - main
   workflow_dispatch:
   schedule:
     # Runs at 23:30 UTC on weekdays.
