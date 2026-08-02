@@ -1,8 +1,17 @@
-"""Build a static GitHub Pages dashboard from Fear & Greed and market data."""
+"""Build the static Fear & Greed dashboard from repository history.
+
+Preferred input:
+    data/fear_greed_spx_daily.csv
+
+Fallback inputs:
+    data/fear_greed_daily.csv
+    data/spx_daily.csv
+
+The parser intentionally accepts many common column-name variants.
+"""
 
 from __future__ import annotations
 
-import html
 import io
 import json
 import math
@@ -46,97 +55,242 @@ def normalize_column(value: object) -> str:
     return re.sub(r"[^a-z0-9]+", "_", str(value).strip().lower()).strip("_")
 
 
-def read_table(path: Path) -> pd.DataFrame:
-    content = path.read_text(encoding="utf-8-sig", errors="replace")
-    parsed: pd.DataFrame | None = None
+def read_csv_flexible(path: Path) -> pd.DataFrame:
+    raw = path.read_text(encoding="utf-8-sig", errors="replace")
+    errors: list[str] = []
 
-    for separator in (None, "\t", ",", ";"):
+    for separator in (None, ",", "\t", ";"):
         try:
-            candidate = pd.read_csv(
-                io.StringIO(content),
+            frame = pd.read_csv(
+                io.StringIO(raw),
                 sep=separator,
                 engine="python",
             )
-            if candidate.shape[1] >= 2:
-                parsed = candidate
-                break
-        except Exception:  # noqa: BLE001
-            pass
+            if frame.shape[1] >= 2:
+                frame.columns = [normalize_column(column) for column in frame.columns]
+                return frame
+        except Exception as exc:  # noqa: BLE001
+            errors.append(str(exc))
 
-    if parsed is None:
-        raise ValueError(f"Could not parse {path}.")
+    raise ValueError(f"Could not parse {path}: {' | '.join(errors[-2:])}")
 
-    parsed.columns = [normalize_column(column) for column in parsed.columns]
 
-    aliases = {
-        "date": {"date", "day"},
-        "time": {"time"},
-        "value": {
-            "value",
+def find_column(
+    frame: pd.DataFrame,
+    exact_names: set[str],
+    contains_any: tuple[str, ...] = (),
+    numeric_range: tuple[float, float] | None = None,
+    excluded: set[str] | None = None,
+) -> str | None:
+    excluded = excluded or set()
+
+    for column in frame.columns:
+        if column in excluded:
+            continue
+        if column in exact_names:
+            return column
+
+    for column in frame.columns:
+        if column in excluded:
+            continue
+        if contains_any and any(token in column for token in contains_any):
+            return column
+
+    if numeric_range is not None:
+        low, high = numeric_range
+        best_column: str | None = None
+        best_score = 0.0
+        for column in frame.columns:
+            if column in excluded:
+                continue
+            values = pd.to_numeric(frame[column], errors="coerce").dropna()
+            if values.empty:
+                continue
+            score = float(values.between(low, high).mean())
+            if score > best_score:
+                best_column = column
+                best_score = score
+        if best_score >= 0.75:
+            return best_column
+
+    return None
+
+
+def detect_date_column(frame: pd.DataFrame) -> str:
+    date_names = {
+        "date",
+        "day",
+        "datetime",
+        "timestamp",
+        "market_date",
+        "trade_date",
+    }
+    for column in frame.columns:
+        if column in date_names or "date" in column:
+            converted = pd.to_datetime(frame[column], errors="coerce")
+            if converted.notna().mean() >= 0.6:
+                return column
+
+    best_column: str | None = None
+    best_score = 0.0
+    for column in frame.columns:
+        converted = pd.to_datetime(frame[column], errors="coerce")
+        score = float(converted.notna().mean())
+        if score > best_score:
+            best_column = column
+            best_score = score
+
+    if best_column is None or best_score < 0.6:
+        raise ValueError("Could not identify a date column.")
+    return best_column
+
+
+def parse_combined_dataset(path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+    frame = read_csv_flexible(path)
+    date_column = detect_date_column(frame)
+
+    fear_column = find_column(
+        frame,
+        {
             "fear_greed",
             "fear_and_greed",
             "fear_greed_index",
+            "feargreed",
+            "feargreedindex",
+            "value",
             "score",
-            "index",
+            "index_value",
         },
-    }
-
-    rename: dict[str, str] = {}
-    for target, candidates in aliases.items():
-        for column in parsed.columns:
-            if column in candidates:
-                rename[column] = target
-                break
-
-    parsed = parsed.rename(columns=rename)
-    if "date" not in parsed.columns or "value" not in parsed.columns:
-        raise ValueError("Fear & Greed file requires Date and Value columns.")
-
-    if "time" not in parsed.columns:
-        parsed["time"] = "16:00:00"
-
-    parsed["date"] = pd.to_datetime(parsed["date"], errors="coerce").dt.normalize()
-    parsed["value"] = pd.to_numeric(parsed["value"], errors="coerce")
-    parsed["timestamp"] = pd.to_datetime(
-        parsed["date"].dt.strftime("%Y-%m-%d")
-        + " "
-        + parsed["time"].astype(str),
-        errors="coerce",
-    )
-    parsed = parsed.dropna(subset=["date", "timestamp", "value"])
-    parsed = parsed[parsed["value"].between(0, 100)]
-    return parsed.sort_values(["date", "timestamp"])
-
-
-def daily_fear_greed(raw: pd.DataFrame) -> pd.DataFrame:
-    method = CONFIG["daily_aggregation"]
-
-    if method == "minimum":
-        indexes = raw.groupby("date")["value"].idxmin()
-        daily = raw.loc[indexes]
-    elif method == "average":
-        daily = raw.groupby("date", as_index=False).agg(
-            timestamp=("timestamp", "max"),
-            value=("value", "mean"),
-        )
-    else:
-        daily = raw.groupby("date", as_index=False).tail(1)
-
-    daily = (
-        daily.sort_values("date")
-        .drop_duplicates("date", keep="last")
-        .set_index("date")[["value"]]
-        .rename(columns={"value": "fear_greed"})
+        contains_any=("fear", "greed"),
+        numeric_range=(0, 100),
+        excluded={date_column},
     )
 
-    for window in (1, 3, 5, 10):
-        daily[f"fg_change_{window}d"] = daily["fear_greed"].diff(window)
+    market_column = find_column(
+        frame,
+        {
+            "spx_close",
+            "sp500_close",
+            "s_p_500_close",
+            "sp_500_close",
+            "close",
+            "adj_close",
+            "adjusted_close",
+            "market_close",
+        },
+        contains_any=("spx", "sp500", "s_p_500", "close"),
+        excluded={date_column, fear_column} if fear_column else {date_column},
+    )
 
-    return daily
+    if fear_column is None:
+        raise ValueError(f"Could not identify Fear & Greed column in {path}.")
+    if market_column is None:
+        raise ValueError(f"Could not identify S&P 500 close column in {path}.")
+
+    dates = pd.to_datetime(frame[date_column], errors="coerce").dt.normalize()
+    fear = pd.to_numeric(frame[fear_column], errors="coerce")
+    market_close = pd.to_numeric(frame[market_column], errors="coerce")
+
+    combined = pd.DataFrame(
+        {
+            "date": dates,
+            "fear_greed": fear,
+            "close": market_close,
+        }
+    ).dropna(subset=["date", "fear_greed", "close"])
+
+    combined = combined[combined["fear_greed"].between(0, 100)]
+    combined = combined.sort_values("date").drop_duplicates("date", keep="last")
+
+    daily = combined.set_index("date")[["fear_greed"]]
+    market = combined.set_index("date")[["close"]]
+    market.index.name = "market_date"
+    market["open"] = market["close"]
+    market["high"] = market["close"]
+    market["low"] = market["close"]
+    return daily, market
+
+
+def parse_fear_dataset(path: Path) -> pd.DataFrame:
+    frame = read_csv_flexible(path)
+    date_column = detect_date_column(frame)
+
+    fear_column = find_column(
+        frame,
+        {
+            "fear_greed",
+            "fear_and_greed",
+            "fear_greed_index",
+            "feargreed",
+            "feargreedindex",
+            "value",
+            "score",
+            "index_value",
+        },
+        contains_any=("fear", "greed"),
+        numeric_range=(0, 100),
+        excluded={date_column},
+    )
+    if fear_column is None:
+        raise ValueError(f"Could not identify Fear & Greed column in {path}.")
+
+    daily = pd.DataFrame(
+        {
+            "date": pd.to_datetime(frame[date_column], errors="coerce").dt.normalize(),
+            "fear_greed": pd.to_numeric(frame[fear_column], errors="coerce"),
+        }
+    ).dropna(subset=["date", "fear_greed"])
+
+    daily = daily[daily["fear_greed"].between(0, 100)]
+    daily = daily.sort_values("date").drop_duplicates("date", keep="last")
+    return daily.set_index("date")[["fear_greed"]]
+
+
+def parse_market_dataset(path: Path) -> pd.DataFrame:
+    frame = read_csv_flexible(path)
+    date_column = detect_date_column(frame)
+
+    close_column = find_column(
+        frame,
+        {
+            "spx_close",
+            "sp500_close",
+            "s_p_500_close",
+            "sp_500_close",
+            "close",
+            "adj_close",
+            "adjusted_close",
+            "market_close",
+        },
+        contains_any=("close", "spx", "sp500"),
+        excluded={date_column},
+    )
+    if close_column is None:
+        raise ValueError(f"Could not identify close column in {path}.")
+
+    market = pd.DataFrame(
+        {
+            "market_date": pd.to_datetime(
+                frame[date_column],
+                errors="coerce",
+            ).dt.normalize(),
+            "close": pd.to_numeric(frame[close_column], errors="coerce"),
+        }
+    ).dropna(subset=["market_date", "close"])
+
+    market = market.sort_values("market_date").drop_duplicates(
+        "market_date",
+        keep="last",
+    )
+    market = market.set_index("market_date")
+    market["open"] = market["close"]
+    market["high"] = market["close"]
+    market["low"] = market["close"]
+    return market[["open", "high", "low", "close"]]
 
 
 def download_market(start: pd.Timestamp) -> pd.DataFrame:
-    ticker = CONFIG["ticker"]
+    ticker = CONFIG["fallback_ticker"]
     raw = yf.download(
         ticker,
         start=(start - pd.Timedelta(days=90)).strftime("%Y-%m-%d"),
@@ -147,7 +301,7 @@ def download_market(start: pd.Timestamp) -> pd.DataFrame:
         threads=False,
     )
     if raw.empty:
-        raise RuntimeError(f"No market data returned for {ticker}.")
+        raise RuntimeError(f"No fallback market data returned for {ticker}.")
 
     if isinstance(raw.columns, pd.MultiIndex):
         raw.columns = [
@@ -155,35 +309,90 @@ def download_market(start: pd.Timestamp) -> pd.DataFrame:
             for column in raw.columns
         ]
 
-    def find(prefix: str) -> str | None:
+    def locate(prefix: str) -> str | None:
         for column in raw.columns:
             normalized = normalize_column(column)
             if normalized == prefix or normalized.startswith(prefix + "_"):
                 return str(column)
         return None
 
-    columns = {name: find(name) for name in ("open", "high", "low", "close")}
-    if columns["close"] is None:
-        raise RuntimeError("Downloaded data has no close column.")
+    close = locate("close")
+    if close is None:
+        raise RuntimeError("Fallback market data has no close column.")
 
     market = pd.DataFrame(
         index=pd.to_datetime(raw.index).tz_localize(None).normalize()
     )
-    for name, source in columns.items():
-        market[name] = (
+    for field in ("open", "high", "low", "close"):
+        source = locate(field)
+        market[field] = (
             pd.to_numeric(raw[source], errors="coerce")
             if source is not None
-            else np.nan
+            else pd.to_numeric(raw[close], errors="coerce")
         )
 
     market = market.dropna(subset=["close"]).sort_index()
     market.index.name = "market_date"
+    return market
+
+
+def load_data() -> tuple[pd.DataFrame, pd.DataFrame, str]:
+    combined_path = ROOT / CONFIG["combined_dataset"]
+    fear_path = ROOT / CONFIG["fear_greed_dataset"]
+    market_path = ROOT / CONFIG["market_dataset"]
+
+    combined_error: Exception | None = None
+
+    if combined_path.exists():
+        try:
+            daily, market = parse_combined_dataset(combined_path)
+            return daily, market, str(combined_path.relative_to(ROOT))
+        except Exception as exc:  # noqa: BLE001
+            combined_error = exc
+            print(f"Combined dataset could not be used: {exc}")
+
+    if not fear_path.exists():
+        raise FileNotFoundError(
+            f"Missing Fear & Greed history: {fear_path.relative_to(ROOT)}"
+        )
+
+    daily = parse_fear_dataset(fear_path)
+
+    if market_path.exists():
+        try:
+            market = parse_market_dataset(market_path)
+            return (
+                daily,
+                market,
+                f"{fear_path.relative_to(ROOT)} + {market_path.relative_to(ROOT)}",
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"Repository market dataset could not be used: {exc}")
+
+    market = download_market(daily.index.min())
+    source = f"{fear_path.relative_to(ROOT)} + Yahoo Finance fallback"
+
+    if combined_error:
+        source += " (combined parser fallback used)"
+    return daily, market, source
+
+
+def add_features(
+    daily: pd.DataFrame,
+    market: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    daily = daily.sort_index().copy()
+    market = market.sort_index().copy()
+
+    for window in (1, 3, 5, 10):
+        daily[f"fg_change_{window}d"] = daily["fear_greed"].diff(window)
+
     market["return_1d"] = market["close"].pct_change()
     market["return_5d"] = market["close"].pct_change(5)
     market["return_20d"] = market["close"].pct_change(20)
     market["high_20d"] = market["close"].rolling(20, min_periods=1).max()
     market["drawdown_from_20d_high"] = market["close"] / market["high_20d"] - 1
-    return market
+    return daily, market
 
 
 def merge_signals(daily: pd.DataFrame, market: pd.DataFrame) -> pd.DataFrame:
@@ -205,7 +414,7 @@ def merge_signals(daily: pd.DataFrame, market: pd.DataFrame) -> pd.DataFrame:
         merged["close"],
     )
 
-    market_positions = {
+    positions = {
         pd.Timestamp(index): position
         for position, index in enumerate(market.index)
     }
@@ -213,7 +422,7 @@ def merge_signals(daily: pd.DataFrame, market: pd.DataFrame) -> pd.DataFrame:
     for horizon in CONFIG["horizons"]:
         outcomes: list[float] = []
         for row in merged.itertuples():
-            position = market_positions.get(pd.Timestamp(row.market_date))
+            position = positions.get(pd.Timestamp(row.market_date))
             target = None if position is None else position + horizon - 1
             if position is None or target is None or target >= len(market):
                 outcomes.append(np.nan)
@@ -225,16 +434,14 @@ def merge_signals(daily: pd.DataFrame, market: pd.DataFrame) -> pd.DataFrame:
 
     drawdowns: list[float] = []
     for row in merged.itertuples():
-        position = market_positions.get(pd.Timestamp(row.market_date))
+        position = positions.get(pd.Timestamp(row.market_date))
         if position is None:
             drawdowns.append(np.nan)
             continue
         end = min(position + 19, len(market) - 1)
         lows = market["low"].iloc[position : end + 1].dropna()
         drawdowns.append(
-            np.nan
-            if lows.empty
-            else float(lows.min() / row.entry_price - 1)
+            np.nan if lows.empty else float(lows.min() / row.entry_price - 1)
         )
     merged["max_drawdown_20d"] = drawdowns
     return merged
@@ -327,7 +534,7 @@ def find_analogs(
         ).abs().fillna(1.0)
 
     nearest = complete.assign(_distance=distance).nsmallest(
-        min(max(minimum, 12), len(complete)),
+        min(max(minimum, 20), len(complete)),
         "_distance",
     )
     return nearest.drop(columns="_distance"), "nearest historical observations"
@@ -350,11 +557,11 @@ def action_summary(
         else average_5d - baseline_5d
     )
 
-    if sample:
-        confidence_low = wilson_low(int((five > 0).sum()), sample)
-    else:
-        confidence_low = math.nan
-
+    confidence_low = (
+        wilson_low(int((five > 0).sum()), sample)
+        if sample
+        else math.nan
+    )
     minimum = int(CONFIG["minimum_action_sample"])
 
     if sample < minimum:
@@ -376,11 +583,11 @@ def action_summary(
     ):
         action = "BUY GRADUALLY"
         tone = "positive"
-        confidence = "Moderate" if sample >= 20 else "Low"
+        confidence = "Moderate" if sample >= 30 else "Low"
         rationale = (
-            "Similar observations had favorable five-day odds and beat "
-            "the sample's unconditional five-day average. Use staged buying, "
-            "not an all-in decision."
+            "Similar historical observations had favorable five-day odds and "
+            "beat the unconditional five-day average. Use staged buying rather "
+            "than treating this as an exact bottom."
         )
     elif (
         probability is not None
@@ -390,18 +597,18 @@ def action_summary(
     ):
         action = "WAIT ON EXTRA BUYING"
         tone = "negative"
-        confidence = "Moderate" if sample >= 20 else "Low"
+        confidence = "Moderate" if sample >= 30 else "Low"
         rationale = (
-            "Similar observations were more often followed by additional "
-            "short-term weakness than gains."
+            "Similar historical observations were more often followed by "
+            "additional short-term weakness than gains."
         )
     else:
         action = "NEUTRAL"
         tone = "mixed"
         confidence = "Low"
         rationale = (
-            "Historical outcomes were mixed or not strong enough to support "
-            "a directional timing decision."
+            "Historical outcomes were mixed or not strong enough to support a "
+            "directional timing decision."
         )
 
     return ActionSummary(
@@ -471,21 +678,20 @@ def pct(value: float | None, digits: int = 1) -> str:
     return f"{value * 100:.{digits}f}%"
 
 
-def value(value_: float | None, digits: int = 1) -> str:
-    if value_ is None or not np.isfinite(value_):
+def num(value: float | None, digits: int = 1) -> str:
+    if value is None or not np.isfinite(value):
         return "N/A"
-    return f"{value_:.{digits}f}"
+    return f"{value:.{digits}f}"
 
 
-def main_chart(daily: pd.DataFrame, market: pd.DataFrame) -> str:
+def chart_html(daily: pd.DataFrame, market: pd.DataFrame) -> str:
     chart_market = market.loc[market.index >= daily.index.min()]
-
     figure = go.Figure()
     figure.add_trace(
         go.Scatter(
             x=chart_market.index,
             y=chart_market["close"],
-            name=f'{CONFIG["ticker"]} close',
+            name="S&P 500 close",
             line={"width": 2},
             yaxis="y",
         )
@@ -496,7 +702,7 @@ def main_chart(daily: pd.DataFrame, market: pd.DataFrame) -> str:
             y=daily["fear_greed"],
             name="Fear & Greed",
             mode="lines+markers",
-            marker={"size": 5},
+            marker={"size": 4},
             line={"width": 2},
             yaxis="y2",
         )
@@ -510,11 +716,11 @@ def main_chart(daily: pd.DataFrame, market: pd.DataFrame) -> str:
     )
     figure.update_layout(
         template="plotly_white",
-        height=500,
+        height=520,
         margin={"l": 45, "r": 55, "t": 25, "b": 40},
         hovermode="x unified",
         legend={"orientation": "h", "y": 1.08},
-        yaxis={"title": f'{CONFIG["ticker"]} price'},
+        yaxis={"title": "S&P 500"},
         yaxis2={
             "title": "Fear & Greed",
             "overlaying": "y",
@@ -531,43 +737,6 @@ def main_chart(daily: pd.DataFrame, market: pd.DataFrame) -> str:
     )
 
 
-def outcomes_chart(analogs: pd.DataFrame) -> str:
-    plot = analogs.dropna(subset=["forward_5d"]).sort_values("signal_date")
-    figure = go.Figure(
-        go.Bar(
-            x=plot["signal_date"],
-            y=plot["forward_5d"] * 100,
-            name="5-day forward return",
-            customdata=np.column_stack(
-                [
-                    plot["fear_greed"],
-                    plot["fg_change_5d"].fillna(np.nan),
-                ]
-            ),
-            hovertemplate=(
-                "%{x|%Y-%m-%d}<br>"
-                "5D return: %{y:.2f}%<br>"
-                "Fear & Greed: %{customdata[0]:.1f}<br>"
-                "5-observation change: %{customdata[1]:.1f}"
-                "<extra></extra>"
-            ),
-        )
-    )
-    figure.add_hline(y=0, line_width=1)
-    figure.update_layout(
-        template="plotly_white",
-        height=350,
-        margin={"l": 45, "r": 20, "t": 20, "b": 40},
-        yaxis_title="Forward return (%)",
-        xaxis_title="Signal date",
-    )
-    return figure.to_html(
-        full_html=False,
-        include_plotlyjs=False,
-        config={"responsive": True, "displaylogo": False},
-    )
-
-
 def dataframe_html(
     frame: pd.DataFrame,
     percentage_columns: set[str] | None = None,
@@ -578,9 +747,7 @@ def dataframe_html(
     for column in output.columns:
         if column in percentage_columns:
             output[column] = output[column].map(
-                lambda item: pct(item, 2)
-                if pd.notna(item)
-                else "—"
+                lambda item: pct(item, 2) if pd.notna(item) else "—"
             )
         elif pd.api.types.is_datetime64_any_dtype(output[column]):
             output[column] = output[column].dt.strftime("%Y-%m-%d")
@@ -597,7 +764,7 @@ def dataframe_html(
     )
 
 
-PAGE_TEMPLATE = Template(r"""<!doctype html>
+PAGE = Template(r"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -606,20 +773,17 @@ PAGE_TEMPLATE = Template(r"""<!doctype html>
   <title>Fear & Greed Market Dashboard</title>
   <link rel="stylesheet" href="styles.css">
 </head>
-<body data-build-id="{{ build_id }}">
+<body data-build-id="{{ build_id }}" data-refresh-seconds="{{ refresh_seconds }}">
   <header class="site-header">
     <div>
       <p class="eyebrow">RESEARCH DASHBOARD</p>
-      <h1>Fear &amp; Greed vs. {{ ticker }}</h1>
-      <p class="subtitle">
-        Historical analogs, forward returns, downside risk, and a cautious
-        rule-based action.
-      </p>
+      <h1>Fear &amp; Greed vs. S&amp;P 500</h1>
+      <p class="subtitle">Using repository history from {{ source }}.</p>
     </div>
     <div class="updated">
       <span>Last built</span>
-      <strong>{{ generated_display }}</strong>
-      <span id="refresh-status">Checking for updates every {{ refresh_minutes }} minutes</span>
+      <strong>{{ generated }}</strong>
+      <span id="refresh-status">Checking for updates</span>
     </div>
   </header>
 
@@ -650,46 +814,15 @@ PAGE_TEMPLATE = Template(r"""<!doctype html>
       <article class="metric">
         <span>{{ metric.label }}</span>
         <strong>{{ metric.value }}</strong>
-        {% if metric.note %}<small>{{ metric.note }}</small>{% endif %}
+        <small>{{ metric.note }}</small>
       </article>
       {% endfor %}
     </section>
 
     <section class="panel">
-      <div class="panel-heading">
-        <div>
-          <p class="eyebrow">MARKET CONTEXT</p>
-          <h2>Price and sentiment history</h2>
-        </div>
-      </div>
-      {{ main_chart | safe }}
-    </section>
-
-    <section class="two-column">
-      <article class="panel">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">CURRENT ANALOGS</p>
-            <h2>Five-day historical outcomes</h2>
-          </div>
-        </div>
-        {{ outcomes_chart | safe }}
-      </article>
-
-      <article class="panel explanation">
-        <p class="eyebrow">HOW TO READ THE ACTION</p>
-        <h2>Decision rules</h2>
-        <ul>
-          <li><strong>Buy gradually:</strong> favorable historical odds and excess return, with enough examples.</li>
-          <li><strong>Wait:</strong> similar observations were more often followed by additional weakness.</li>
-          <li><strong>Neutral:</strong> mixed evidence; continue a normal schedule rather than market timing.</li>
-          <li><strong>Insufficient evidence:</strong> sample too small to support an action.</li>
-        </ul>
-        <p class="fine-print">
-          This is a mechanical research label, not personalized investment
-          advice or a guarantee of future performance.
-        </p>
-      </article>
+      <p class="eyebrow">MARKET CONTEXT</p>
+      <h2>Price and sentiment history</h2>
+      {{ chart | safe }}
     </section>
 
     <section class="panel">
@@ -698,7 +831,7 @@ PAGE_TEMPLATE = Template(r"""<!doctype html>
           <p class="eyebrow">EVENT STUDY</p>
           <h2>Threshold and sudden-drop backtests</h2>
         </div>
-        <a class="download" href="event_study.csv">Download CSV</a>
+        <a href="event_study.csv">Download CSV</a>
       </div>
       <div class="table-wrap">{{ event_table | safe }}</div>
     </section>
@@ -706,36 +839,29 @@ PAGE_TEMPLATE = Template(r"""<!doctype html>
     <section class="panel">
       <div class="panel-heading">
         <div>
-          <p class="eyebrow">HISTORICAL MATCHES</p>
-          <h2>Observations most similar to today</h2>
+          <p class="eyebrow">CURRENT ANALOGS</p>
+          <h2>Historically similar observations</h2>
         </div>
-        <a class="download" href="analogs.csv">Download CSV</a>
+        <a href="analogs.csv">Download CSV</a>
       </div>
       <div class="table-wrap">{{ analog_table | safe }}</div>
     </section>
 
-    <section class="panel methodology">
-      <p class="eyebrow">METHODOLOGY AND LIMITATIONS</p>
-      <h2>What the dashboard is actually measuring</h2>
+    <section class="panel">
+      <p class="eyebrow">LIMITATIONS</p>
+      <h2>How to interpret the result</h2>
       <p>
-        Each daily Fear &amp; Greed observation is matched to the next market
-        session, and forward returns begin from that session's opening price
-        when available. A cooldown reduces repeated counting of one prolonged
-        fear episode.
-      </p>
-      <p>
-        Fear &amp; Greed may react to the same market decline it appears to
-        predict. Missing sentiment dates, a small number of independent fear
-        episodes, source revisions, and changing market regimes can all bias
-        the result. The dashboard therefore disables strong language when the
-        sample is too small.
+        The label is a mechanical summary of historical analogs, not a forecast
+        guarantee. Fear &amp; Greed may react to the same price movement it is
+        being used to predict. Long gaps, repeated observations from one market
+        episode, and changes in market regime can bias the results.
       </p>
     </section>
   </main>
 
   <footer>
-    <span>Data source for prices: Yahoo Finance via yfinance.</span>
-    <span>Source repository may be private, but ordinary GitHub Pages output is public.</span>
+    <span>Historical performance does not guarantee future results.</span>
+    <span>The published GitHub Pages site is public.</span>
   </footer>
 
   <script src="app.js"></script>
@@ -753,217 +879,112 @@ CSS = r"""
   --muted: #5f6b7a;
   --border: #d8dee8;
   --accent: #275dad;
-  --positive: #137a46;
   --positive-bg: #eaf7f0;
-  --negative: #a62929;
+  --positive: #137a46;
   --negative-bg: #fbecec;
-  --mixed: #8a5b00;
+  --negative: #a62929;
   --mixed-bg: #fff6dc;
-  --neutral-bg: #edf1f5;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
-
 * { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-}
-
-.site-header,
-main,
-.warnings,
-footer {
+body { margin: 0; background: var(--bg); color: var(--text); }
+.site-header, main, .warnings, footer {
   width: min(1180px, calc(100% - 32px));
   margin-inline: auto;
 }
-
 .site-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 32px;
-  align-items: flex-end;
-  padding: 40px 0 24px;
+  display: flex; justify-content: space-between; gap: 28px;
+  align-items: end; padding: 38px 0 22px;
 }
-
-h1, h2, p { margin-top: 0; }
-h1 { margin-bottom: 8px; font-size: clamp(2rem, 4vw, 3.5rem); }
-h2 { margin-bottom: 10px; }
-.subtitle, .fine-print { color: var(--muted); }
+h1 { margin: 0 0 8px; font-size: clamp(2rem, 4vw, 3.4rem); }
+h2, p { margin-top: 0; }
+.subtitle, small, .updated { color: var(--muted); }
 .eyebrow {
-  margin-bottom: 7px;
-  color: var(--accent);
-  font-size: .75rem;
-  font-weight: 800;
-  letter-spacing: .12em;
+  margin-bottom: 7px; color: var(--accent); font-size: .75rem;
+  font-weight: 800; letter-spacing: .12em;
 }
-
-.updated {
-  display: grid;
-  gap: 4px;
-  text-align: right;
-  color: var(--muted);
-  font-size: .84rem;
-}
-.updated strong { color: var(--text); font-size: 1rem; }
-
+.updated { display: grid; gap: 4px; text-align: right; font-size: .84rem; }
+.updated strong { color: var(--text); }
 .warnings { display: grid; gap: 8px; margin-bottom: 18px; }
 .warning {
-  border: 1px solid #e7c66d;
-  border-radius: 10px;
-  background: #fff8df;
-  color: #644b00;
-  padding: 12px 14px;
+  padding: 12px 14px; border: 1px solid #e7c66d;
+  border-radius: 10px; background: #fff8df; color: #644b00;
 }
-
 main { display: grid; gap: 20px; padding-bottom: 36px; }
-
-.panel,
-.action-panel,
-.metric {
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: var(--panel);
+.panel, .action-panel, .metric {
+  border: 1px solid var(--border); border-radius: 16px; background: var(--panel);
 }
-
 .panel { padding: 22px; }
-.panel-heading {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
 .action-panel {
-  display: grid;
-  grid-template-columns: 1.5fr 1fr;
-  gap: 24px;
-  padding: 26px;
-  border-width: 2px;
+  display: grid; grid-template-columns: 1.5fr 1fr;
+  gap: 24px; padding: 26px; border-width: 2px;
 }
 .action-positive { border-color: var(--positive); background: var(--positive-bg); }
 .action-negative { border-color: var(--negative); background: var(--negative-bg); }
 .action-mixed { border-color: #d2a72d; background: var(--mixed-bg); }
-.action-neutral { background: var(--neutral-bg); }
-
+.action-neutral { background: #edf1f5; }
 .action-panel dl {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  margin: 0;
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 10px; margin: 0;
 }
 .action-panel dl div {
-  padding: 12px;
-  border: 1px solid rgba(100, 116, 139, .25);
-  border-radius: 12px;
-  background: rgba(255,255,255,.45);
+  padding: 12px; border: 1px solid rgba(100,116,139,.25);
+  border-radius: 12px; background: rgba(255,255,255,.45);
 }
 dt { color: var(--muted); font-size: .78rem; }
 dd { margin: 6px 0 0; font-weight: 800; }
-
-.metrics {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-}
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .metric { padding: 18px; }
 .metric span, .metric small { display: block; color: var(--muted); }
 .metric strong { display: block; margin: 8px 0 4px; font-size: 1.7rem; }
-
-.two-column {
-  display: grid;
-  grid-template-columns: 1.4fr .8fr;
-  gap: 20px;
+.panel-heading {
+  display: flex; align-items: center; justify-content: space-between; gap: 18px;
 }
-.explanation ul { padding-left: 20px; line-height: 1.6; }
-
-.table-wrap {
-  overflow-x: auto;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-}
+.panel-heading a { color: var(--accent); font-weight: 700; text-decoration: none; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
 .data-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: .9rem;
-  white-space: nowrap;
+  width: 100%; border-collapse: collapse; font-size: .9rem; white-space: nowrap;
 }
-.data-table th,
-.data-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  text-align: right;
+.data-table th, .data-table td {
+  padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: right;
 }
-.data-table th:first-child,
-.data-table td:first-child { text-align: left; }
+.data-table th:first-child, .data-table td:first-child { text-align: left; }
 .data-table th { background: rgba(100,116,139,.08); }
-.data-table tr:last-child td { border-bottom: 0; }
-
-.download {
-  color: var(--accent);
-  text-decoration: none;
-  font-weight: 700;
-}
-.methodology p { max-width: 90ch; line-height: 1.65; }
-
 footer {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 22px 0 34px;
-  border-top: 1px solid var(--border);
-  color: var(--muted);
-  font-size: .82rem;
+  display: flex; justify-content: space-between; gap: 20px;
+  padding: 22px 0 34px; color: var(--muted); font-size: .82rem;
 }
-
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0c1118;
-    --panel: #121a24;
-    --text: #edf2f7;
-    --muted: #a1acba;
-    --border: #2a3645;
-    --accent: #83b4ff;
-    --positive-bg: #102a20;
-    --negative-bg: #301616;
-    --mixed-bg: #2e260f;
-    --neutral-bg: #17212d;
+    --bg: #0c1118; --panel: #121a24; --text: #edf2f7;
+    --muted: #a1acba; --border: #2a3645; --accent: #83b4ff;
+    --positive-bg: #102a20; --negative-bg: #301616; --mixed-bg: #2e260f;
   }
   .warning { background: #2e260f; color: #f5d77d; border-color: #65551f; }
+  .action-neutral { background: #17212d; }
   .action-panel dl div { background: rgba(0,0,0,.12); }
 }
-
 @media (max-width: 850px) {
-  .site-header,
-  .action-panel,
-  .two-column {
-    grid-template-columns: 1fr;
-  }
   .site-header { display: grid; align-items: start; }
   .updated { text-align: left; }
-  .metrics { grid-template-columns: repeat(2, 1fr); }
+  .action-panel { grid-template-columns: 1fr; }
   .action-panel dl { grid-template-columns: 1fr; }
-  footer { display: grid; }
+  .metrics { grid-template-columns: repeat(2, 1fr); }
 }
-
 @media (max-width: 520px) {
   .metrics { grid-template-columns: 1fr; }
-  .panel, .action-panel { padding: 16px; }
 }
 """
 
+
 JS = r"""
-const intervalSeconds = Number(document.body.dataset.refreshSeconds || 300);
 const currentBuild = document.body.dataset.buildId;
+const intervalSeconds = Number(document.body.dataset.refreshSeconds || 300);
 const statusNode = document.getElementById("refresh-status");
 
 async function checkForUpdate() {
   try {
-    const response = await fetch(`version.json?t=${Date.now()}`, {
-      cache: "no-store"
-    });
+    const response = await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const version = await response.json();
 
@@ -975,7 +996,7 @@ async function checkForUpdate() {
 
     statusNode.textContent =
       `Current as of ${new Date(version.generated_at).toLocaleString()}`;
-  } catch (error) {
+  } catch {
     statusNode.textContent = "Could not check for a newer build";
   }
 }
@@ -988,11 +1009,12 @@ checkForUpdate();
 def main() -> None:
     SITE.mkdir(parents=True, exist_ok=True)
 
-    fear_path = ROOT / CONFIG["fear_greed_file"]
-    raw = read_table(fear_path)
-    daily = daily_fear_greed(raw)
-    market = download_market(daily.index.min())
+    daily, market, source = load_data()
+    daily, market = add_features(daily, market)
     merged = merge_signals(daily, market)
+
+    if merged.empty:
+        raise RuntimeError("No sentiment dates could be matched to later market sessions.")
 
     latest = daily.iloc[-1]
     analogs, analog_method = find_analogs(merged, latest)
@@ -1001,7 +1023,6 @@ def main() -> None:
 
     generated = datetime.now(timezone.utc)
     build_id = generated.strftime("%Y%m%dT%H%M%SZ")
-
     gaps = daily.index.to_series().diff().dt.days.dropna()
     large_gaps = int((gaps > 7).sum())
     completed_5d = int(merged["forward_5d"].notna().sum())
@@ -1009,29 +1030,24 @@ def main() -> None:
     warnings: list[str] = []
     if large_gaps:
         warnings.append(
-            f"Fear & Greed history contains {large_gaps} gap(s) longer than seven days."
+            f"Sentiment history contains {large_gaps} gap(s) longer than seven days."
         )
-    if completed_5d < 30:
+    if completed_5d < 100:
         warnings.append(
             f"Only {completed_5d} observations have completed five-day outcomes."
         )
     if summary.sample_size < int(CONFIG["minimum_action_sample"]):
-        warnings.append(
-            "The action is disabled because there are too few completed analogs."
-        )
-    warnings.append(
-        "A private source repository does not make an ordinary GitHub Pages site private."
-    )
+        warnings.append("The action is disabled because the analog sample is too small.")
 
     metrics = [
         {
             "label": "Latest Fear & Greed",
-            "value": value(float(latest["fear_greed"])),
+            "value": num(float(latest["fear_greed"])),
             "note": daily.index.max().strftime("%Y-%m-%d"),
         },
         {
             "label": "5-observation change",
-            "value": value(
+            "value": num(
                 float(latest["fg_change_5d"])
                 if pd.notna(latest["fg_change_5d"])
                 else None
@@ -1041,12 +1057,12 @@ def main() -> None:
         {
             "label": "Positive after 5 days",
             "value": pct(summary.probability_positive_5d),
-            "note": f"{summary.sample_size} analogs",
+            "note": f"{summary.sample_size} historical analogs",
         },
         {
             "label": "Average 5-day outcome",
             "value": pct(summary.average_return_5d),
-            "note": f"Excess: {pct(summary.excess_average_5d)}",
+            "note": f"Excess vs baseline: {pct(summary.excess_average_5d)}",
         },
         {
             "label": "Median 5-day outcome",
@@ -1056,7 +1072,7 @@ def main() -> None:
         {
             "label": "Average 20-day outcome",
             "value": pct(summary.average_return_20d),
-            "note": "Where available",
+            "note": "Where enough future data exists",
         },
         {
             "label": "Worst 5-day analog",
@@ -1066,7 +1082,7 @@ def main() -> None:
         {
             "label": "Average worst drawdown, next 20D",
             "value": pct(summary.average_max_drawdown_20d),
-            "note": "Adverse move after entry",
+            "note": "Adverse move after the signal",
         },
     ]
 
@@ -1086,16 +1102,15 @@ def main() -> None:
     ]
     analog_export = analogs[analog_columns].copy()
 
-    page = PAGE_TEMPLATE.render(
+    html = PAGE.render(
         build_id=build_id,
-        ticker=CONFIG["ticker"],
-        generated_display=generated.strftime("%Y-%m-%d %H:%M UTC"),
-        refresh_minutes=max(1, int(CONFIG["refresh_seconds"]) // 60),
+        refresh_seconds=int(CONFIG["refresh_seconds"]),
+        source=source,
+        generated=generated.strftime("%Y-%m-%d %H:%M UTC"),
         summary=summary,
         warnings=warnings,
         metrics=metrics,
-        main_chart=main_chart(daily, market),
-        outcomes_chart=outcomes_chart(analogs),
+        chart=chart_html(daily, market),
         event_table=dataframe_html(
             study,
             {
@@ -1120,19 +1135,10 @@ def main() -> None:
         ),
     )
 
-    page = page.replace(
-        '<body data-build-id="' + build_id + '">',
-        (
-            '<body data-build-id="' + build_id + '" '
-            f'data-refresh-seconds="{int(CONFIG["refresh_seconds"])}">'
-        ),
-    )
-
-    (SITE / "index.html").write_text(page, encoding="utf-8")
+    (SITE / "index.html").write_text(html, encoding="utf-8")
     (SITE / "styles.css").write_text(CSS, encoding="utf-8")
     (SITE / "app.js").write_text(JS, encoding="utf-8")
     (SITE / ".nojekyll").write_text("", encoding="utf-8")
-
     study.to_csv(SITE / "event_study.csv", index=False)
     analog_export.to_csv(SITE / "analogs.csv", index=False)
     merged.to_csv(SITE / "full_analysis.csv", index=False)
@@ -1140,21 +1146,23 @@ def main() -> None:
     report = {
         "generated_at": generated.isoformat(),
         "build_id": build_id,
-        "ticker": CONFIG["ticker"],
-        "latest_fear_greed_date": daily.index.max().date().isoformat(),
-        "latest_fear_greed": float(latest["fear_greed"]),
-        "five_observation_change": (
-            None
-            if pd.isna(latest["fg_change_5d"])
-            else float(latest["fg_change_5d"])
-        ),
-        "summary": asdict(summary),
-        "quality": {
-            "raw_observations": len(raw),
+        "data_source": source,
+        "coverage": {
+            "first_fear_greed_date": daily.index.min().date().isoformat(),
+            "last_fear_greed_date": daily.index.max().date().isoformat(),
             "daily_observations": len(daily),
-            "completed_5d": completed_5d,
-            "large_gaps": large_gaps,
+            "completed_5d_outcomes": completed_5d,
+            "gaps_longer_than_7_days": large_gaps,
         },
+        "latest": {
+            "date": daily.index.max().date().isoformat(),
+            "fear_greed": float(latest["fear_greed"]),
+            "five_observation_change": (
+                None if pd.isna(latest["fg_change_5d"])
+                else float(latest["fg_change_5d"])
+            ),
+        },
+        "summary": asdict(summary),
         "warnings": warnings,
     }
 
@@ -1173,9 +1181,11 @@ def main() -> None:
         encoding="utf-8",
     )
 
-    print(f"Built {SITE / 'index.html'}")
+    print(f"Data source: {source}")
+    print(f"Coverage: {daily.index.min().date()} through {daily.index.max().date()}")
+    print(f"Daily observations: {len(daily)}")
     print(f"Action: {summary.action}")
-    print(f"Analogs: {summary.sample_size}")
+    print(f"Built: {SITE / 'index.html'}")
 
 
 if __name__ == "__main__":

@@ -14,14 +14,15 @@ on:
       - ".github/workflows/deploy-pages.yml"
       - "config.json"
       - "requirements.txt"
-      - "data/fear_greed.tsv"
+      - "data/fear_greed_daily.csv"
+      - "data/fear_greed_spx_daily.csv"
+      - "data/spx_daily.csv"
       - "scripts/build_dashboard.py"
-      - "scripts/update_fear_greed.py"
 
   workflow_dispatch:
 
   schedule:
-    - cron: "30 23 * * 1-5"
+    - cron: "45 23 * * 1-5"
 
 permissions:
   contents: read
@@ -49,9 +50,7 @@ jobs:
           required_files=(
             "requirements.txt"
             "config.json"
-            "data/fear_greed.tsv"
             "scripts/build_dashboard.py"
-            "scripts/update_fear_greed.py"
           )
 
           for file in "${required_files[@]}"; do
@@ -61,7 +60,13 @@ jobs:
             fi
           done
 
-          echo "All required dashboard files are present."
+          if [[ ! -f "data/fear_greed_spx_daily.csv" && ! -f "data/fear_greed_daily.csv" ]]; then
+            echo "::error::Neither combined nor separate Fear & Greed history exists."
+            exit 1
+          fi
+
+          echo "Available dashboard datasets:"
+          find data -maxdepth 1 -type f | sort
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -74,11 +79,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
-
-      - name: Optionally refresh Fear & Greed data
-        env:
-          FEAR_GREED_SOURCE_URL: ${{ secrets.FEAR_GREED_SOURCE_URL }}
-        run: python scripts/update_fear_greed.py
 
       - name: Generate static dashboard
         run: python scripts/build_dashboard.py
@@ -103,7 +103,6 @@ jobs:
             fi
           done
 
-          echo "Generated website files:"
           find site -maxdepth 2 -type f | sort
 
       - name: Configure GitHub Pages

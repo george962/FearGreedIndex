@@ -1,8 +1,8 @@
 {
-  "ticker": "SPY",
-  "fear_greed_file": "data/fear_greed.tsv",
-  "daily_aggregation": "last",
-  "market_entry": "next_open",
+  "combined_dataset": "data/fear_greed_spx_daily.csv",
+  "fear_greed_dataset": "data/fear_greed_daily.csv",
+  "market_dataset": "data/spx_daily.csv",
+  "fallback_ticker": "^GSPC",
   "cooldown_calendar_days": 10,
   "minimum_action_sample": 8,
   "refresh_seconds": 300,
