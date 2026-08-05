@@ -1,34 +1,31 @@
 #!/usr/bin/env python3
 """
-build_dashboard.py
+scripts/build_dashboard.py
 
 Builds a static "Fear & Greed vs. S&P 500" research dashboard from the
 data already living in this repository.
 
-Expected inputs (paths come from config.json, all relative to the repo root):
-    combined_dataset  data/fear_greed_spx_daily.csv   (fear+market already joined)
-    fear_greed_dataset data/fear_greed_daily.csv       (Fear & Greed only)
-    market_dataset     data/spx_daily.csv              (S&P 500 OHLC only)
+IMPORTANT: this module's public function names and signatures
+(parse_fear_dataset, parse_market_dataset, parse_combined_dataset,
+add_features, merge_signals) are part of the repository's tested contract —
+test_dashboard.py imports them directly. Keep the names and return shapes
+stable even if you refactor the internals.
+
+Expected inputs (paths come from config.json, relative to the repo root):
+    combined_dataset   data/fear_greed_spx_daily.csv   (fear + market already joined)
+    fear_greed_dataset data/fear_greed_daily.csv        (Fear & Greed only)
+    market_dataset      data/spx_daily.csv              (S&P 500 OHLC only)
 
 Resolution order:
     1. Separate fear_greed_dataset + market_dataset, if both exist and parse.
     2. combined_dataset, if it exists and parses.
     3. fear_greed_dataset alone, with market data pulled from Yahoo Finance
-       via yfinance as a last resort (only triggers if 1 and 2 fail).
+       via yfinance as a last resort.
 
 Output (written to --site-dir, default "site/"):
-    index.html          the dashboard page
-    styles.css, app.js  static assets (auto-refresh polling included)
-    event_study.csv      threshold / drawdown backtest table
-    analogs.csv           the historical analogs used for today's call
-    full_analysis.csv     every matched observation, for your own digging
-    analysis.json          machine-readable summary of the whole run
-    version.json            build id + timestamp, polled by app.js
-
-Usage:
-    python build_dashboard.py
-    python build_dashboard.py --config config.json --site-dir site
-    python build_dashboard.py --skip-yahoo-fallback   # fail loudly instead
+    index.html, styles.css, app.js
+    event_study.csv, analogs.csv, full_analysis.csv
+    analysis.json, version.json
 """
 
 from __future__ import annotations
@@ -55,7 +52,7 @@ except ImportError:
     yf = None
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 
 
 # =============================================================================
@@ -86,7 +83,7 @@ class Settings:
             print(f"No config found at {path}; using built-in defaults.")
             return cls()
         raw = json.loads(path.read_text(encoding="utf-8"))
-        known_fields = {f for f in cls.__dataclass_fields__}
+        known_fields = set(cls.__dataclass_fields__)
         filtered = {key: value for key, value in raw.items() if key in known_fields}
         return cls(**filtered)
 
@@ -164,217 +161,218 @@ def pick_date_column(frame: pd.DataFrame) -> str:
 
 
 # =============================================================================
-# Loading the two series
+# Public parsing API (imported directly by test_dashboard.py — keep names/shapes)
 # =============================================================================
 
-class DataSource:
-    """Resolves Fear & Greed + S&P 500 history using the configured fallback chain."""
+def parse_fear_dataset(path: Path) -> pd.DataFrame:
+    """Parse a Fear & Greed-only CSV into a DataFrame indexed by date with a
+    single 'fear_greed' column."""
+    frame = sniff_read_csv(path)
+    date_col = pick_date_column(frame)
+    value_col = pick_column(
+        frame,
+        exact={
+            "fear_greed", "fear_and_greed", "fear_greed_index",
+            "feargreed", "value", "score", "index_value", "rating_value",
+        },
+        contains=("fear", "greed"),
+        numeric_between=(0, 100),
+        skip={date_col},
+    )
+    if value_col is None:
+        raise ValueError(f"Could not identify a Fear & Greed value column in {path}.")
 
-    def __init__(self, settings: Settings, root: Path, allow_yahoo: bool = True):
-        self.settings = settings
-        self.root = root
-        self.allow_yahoo = allow_yahoo
+    out = pd.DataFrame({
+        "date": pd.to_datetime(frame[date_col], errors="coerce").dt.normalize(),
+        "fear_greed": pd.to_numeric(frame[value_col], errors="coerce"),
+    }).dropna()
+    out = out[out["fear_greed"].between(0, 100)]
+    out = out.sort_values("date").drop_duplicates("date", keep="last")
+    return out.set_index("date")
 
-    def load(self) -> tuple[pd.DataFrame, pd.DataFrame, str]:
-        fear_path = self.root / self.settings.fear_greed_dataset
-        market_path = self.root / self.settings.market_dataset
-        combined_path = self.root / self.settings.combined_dataset
 
-        if fear_path.exists() and market_path.exists():
-            try:
-                sentiment = self._parse_sentiment(fear_path)
-                market = self._parse_market(market_path)
-                return (
-                    sentiment,
-                    market,
-                    f"{fear_path.relative_to(self.root)} + {market_path.relative_to(self.root)}",
-                )
-            except Exception as exc:  # noqa: BLE001
-                print(f"[data] separate datasets unusable ({exc}); trying combined file.")
+def parse_market_dataset(path: Path) -> pd.DataFrame:
+    """Parse an S&P 500 OHLC CSV into a DataFrame indexed by date with
+    open/high/low/close columns."""
+    frame = sniff_read_csv(path)
+    date_col = pick_date_column(frame)
+    close_col = pick_column(
+        frame,
+        exact={
+            "spx_close", "sp500_close", "close", "adj_close",
+            "adjusted_close", "market_close",
+        },
+        contains=("close",),
+        skip={date_col},
+    )
+    if close_col is None:
+        raise ValueError(f"Could not identify a close-price column in {path}.")
 
-        if combined_path.exists():
-            try:
-                sentiment, market = self._parse_combined(combined_path)
-                return sentiment, market, str(combined_path.relative_to(self.root))
-            except Exception as exc:  # noqa: BLE001
-                print(f"[data] combined dataset unusable ({exc}); trying Yahoo fallback.")
+    def numeric(name: str) -> pd.Series:
+        source = name if name in frame.columns else close_col
+        return pd.to_numeric(frame[source], errors="coerce")
 
-        if not fear_path.exists():
-            raise FileNotFoundError(
-                f"No Fear & Greed history found at {fear_path.relative_to(self.root)}."
-            )
+    out = pd.DataFrame({
+        "date": pd.to_datetime(frame[date_col], errors="coerce").dt.normalize(),
+        "open": numeric("open"),
+        "high": numeric("high"),
+        "low": numeric("low"),
+        "close": pd.to_numeric(frame[close_col], errors="coerce"),
+    }).dropna(subset=["date", "close"])
+    out = out.sort_values("date").drop_duplicates("date", keep="last")
+    return out.set_index("date")[["open", "high", "low", "close"]]
 
-        sentiment = self._parse_sentiment(fear_path)
-        if not self.allow_yahoo:
-            raise RuntimeError(
-                "No usable market dataset and Yahoo fallback is disabled "
-                "(--skip-yahoo-fallback)."
-            )
-        market = self._download_market(sentiment.index.min())
-        return sentiment, market, f"{fear_path.relative_to(self.root)} + Yahoo Finance"
 
-    def _parse_sentiment(self, path: Path) -> pd.DataFrame:
-        frame = sniff_read_csv(path)
-        date_col = pick_date_column(frame)
-        value_col = pick_column(
-            frame,
-            exact={
-                "fear_greed", "fear_and_greed", "fear_greed_index",
-                "feargreed", "value", "score", "index_value", "rating_value",
-            },
-            contains=("fear", "greed"),
-            numeric_between=(0, 100),
-            skip={date_col},
+def parse_combined_dataset(path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Parse the repository's already-joined fear+market CSV into
+    (daily, market) — same shapes as parse_fear_dataset/parse_market_dataset."""
+    frame = sniff_read_csv(path)
+    required = {
+        "fear_greed_date_utc", "fear_greed_value", "spx_date",
+        "spx_open", "spx_high", "spx_low", "spx_close",
+    }
+    missing = required - set(frame.columns)
+    if missing:
+        raise ValueError(f"Combined dataset is missing columns: {', '.join(sorted(missing))}")
+
+    daily = pd.DataFrame({
+        "date": pd.to_datetime(frame["fear_greed_date_utc"], errors="coerce").dt.normalize(),
+        "fear_greed": pd.to_numeric(frame["fear_greed_value"], errors="coerce"),
+    }).dropna()
+    daily = daily[daily["fear_greed"].between(0, 100)]
+    daily = daily.sort_values("date").drop_duplicates("date", keep="last")
+    daily = daily.set_index("date")
+
+    market = pd.DataFrame({
+        "date": pd.to_datetime(frame["spx_date"], errors="coerce").dt.normalize(),
+        "open": pd.to_numeric(frame["spx_open"], errors="coerce"),
+        "high": pd.to_numeric(frame["spx_high"], errors="coerce"),
+        "low": pd.to_numeric(frame["spx_low"], errors="coerce"),
+        "close": pd.to_numeric(frame["spx_close"], errors="coerce"),
+    }).dropna(subset=["date", "close"])
+    market = market.sort_values("date").drop_duplicates("date", keep="last")
+    market = market.set_index("date")[["open", "high", "low", "close"]]
+
+    return daily, market
+
+
+def download_market(settings: Settings, start: pd.Timestamp) -> pd.DataFrame:
+    if yf is None:
+        raise RuntimeError("yfinance is not installed and no market CSV is usable.")
+    ticker = settings.fallback_ticker
+    raw = yf.download(
+        ticker,
+        start=(start - pd.Timedelta(days=90)).strftime("%Y-%m-%d"),
+        end=(pd.Timestamp.now(tz="UTC") + pd.Timedelta(days=1)).strftime("%Y-%m-%d"),
+        auto_adjust=False,
+        progress=False,
+        actions=False,
+        threads=False,
+    )
+    if raw.empty:
+        raise RuntimeError(f"Yahoo Finance returned no data for {ticker}.")
+    if isinstance(raw.columns, pd.MultiIndex):
+        raw.columns = ["_".join(str(p) for p in col if str(p)) for col in raw.columns]
+
+    def locate(prefix: str) -> Optional[str]:
+        for column in raw.columns:
+            normalized = slugify(column)
+            if normalized == prefix or normalized.startswith(prefix + "_"):
+                return str(column)
+        return None
+
+    close_source = locate("close")
+    if close_source is None:
+        raise RuntimeError("Yahoo Finance response has no close column.")
+
+    market = pd.DataFrame(index=pd.to_datetime(raw.index).tz_localize(None).normalize())
+    for field_name in ("open", "high", "low", "close"):
+        source = locate(field_name)
+        market[field_name] = pd.to_numeric(
+            raw[source] if source is not None else raw[close_source], errors="coerce"
         )
-        if value_col is None:
-            raise ValueError("no Fear & Greed value column found")
+    market = market.dropna(subset=["close"]).sort_index()
+    market.index.name = "date"
+    return market
 
-        out = pd.DataFrame({
-            "date": pd.to_datetime(frame[date_col], errors="coerce").dt.normalize(),
-            "fear_greed": pd.to_numeric(frame[value_col], errors="coerce"),
-        }).dropna()
-        out = out[out["fear_greed"].between(0, 100)]
-        out = out.sort_values("date").drop_duplicates("date", keep="last")
-        return out.set_index("date")
 
-    def _parse_market(self, path: Path) -> pd.DataFrame:
-        frame = sniff_read_csv(path)
-        date_col = pick_date_column(frame)
-        close_col = pick_column(
-            frame,
-            exact={
-                "spx_close", "sp500_close", "close", "adj_close",
-                "adjusted_close", "market_close",
-            },
-            contains=("close",),
-            skip={date_col},
+def load_data(settings: Settings, root: Path, allow_yahoo: bool = True) -> tuple[pd.DataFrame, pd.DataFrame, str]:
+    """Resolve Fear & Greed + S&P 500 history using the configured fallback chain."""
+    fear_path = root / settings.fear_greed_dataset
+    market_path = root / settings.market_dataset
+    combined_path = root / settings.combined_dataset
+
+    if fear_path.exists() and market_path.exists():
+        try:
+            daily = parse_fear_dataset(fear_path)
+            market = parse_market_dataset(market_path)
+            return daily, market, f"{fear_path.relative_to(root)} + {market_path.relative_to(root)}"
+        except Exception as exc:  # noqa: BLE001
+            print(f"[data] separate datasets unusable ({exc}); trying combined file.")
+
+    if combined_path.exists():
+        try:
+            daily, market = parse_combined_dataset(combined_path)
+            return daily, market, str(combined_path.relative_to(root))
+        except Exception as exc:  # noqa: BLE001
+            print(f"[data] combined dataset unusable ({exc}); trying Yahoo fallback.")
+
+    if not fear_path.exists():
+        raise FileNotFoundError(f"No Fear & Greed history found at {fear_path.relative_to(root)}.")
+
+    daily = parse_fear_dataset(fear_path)
+    if not allow_yahoo:
+        raise RuntimeError(
+            "No usable market dataset and Yahoo fallback is disabled (--skip-yahoo-fallback)."
         )
-        if close_col is None:
-            raise ValueError("no close-price column found")
-
-        def numeric(name: str) -> pd.Series:
-            source = name if name in frame.columns else close_col
-            return pd.to_numeric(frame[source], errors="coerce")
-
-        out = pd.DataFrame({
-            "date": pd.to_datetime(frame[date_col], errors="coerce").dt.normalize(),
-            "open": numeric("open"),
-            "high": numeric("high"),
-            "low": numeric("low"),
-            "close": pd.to_numeric(frame[close_col], errors="coerce"),
-        }).dropna(subset=["date", "close"])
-        out = out.sort_values("date").drop_duplicates("date", keep="last")
-        return out.set_index("date")
-
-    def _parse_combined(self, path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
-        frame = sniff_read_csv(path)
-        required = {
-            "fear_greed_date_utc", "fear_greed_value", "spx_date",
-            "spx_open", "spx_high", "spx_low", "spx_close",
-        }
-        missing = required - set(frame.columns)
-        if missing:
-            raise ValueError(f"missing columns: {', '.join(sorted(missing))}")
-
-        sentiment = pd.DataFrame({
-            "date": pd.to_datetime(frame["fear_greed_date_utc"], errors="coerce").dt.normalize(),
-            "fear_greed": pd.to_numeric(frame["fear_greed_value"], errors="coerce"),
-        }).dropna()
-        sentiment = sentiment[sentiment["fear_greed"].between(0, 100)]
-        sentiment = sentiment.sort_values("date").drop_duplicates("date", keep="last")
-        sentiment = sentiment.set_index("date")
-
-        market = pd.DataFrame({
-            "date": pd.to_datetime(frame["spx_date"], errors="coerce").dt.normalize(),
-            "open": pd.to_numeric(frame["spx_open"], errors="coerce"),
-            "high": pd.to_numeric(frame["spx_high"], errors="coerce"),
-            "low": pd.to_numeric(frame["spx_low"], errors="coerce"),
-            "close": pd.to_numeric(frame["spx_close"], errors="coerce"),
-        }).dropna(subset=["date", "close"])
-        market = market.sort_values("date").drop_duplicates("date", keep="last")
-        market = market.set_index("date")
-
-        return sentiment, market
-
-    def _download_market(self, start: pd.Timestamp) -> pd.DataFrame:
-        if yf is None:
-            raise RuntimeError("yfinance is not installed and no market CSV is usable.")
-        ticker = self.settings.fallback_ticker
-        raw = yf.download(
-            ticker,
-            start=(start - pd.Timedelta(days=90)).strftime("%Y-%m-%d"),
-            end=(pd.Timestamp.now(tz="UTC") + pd.Timedelta(days=1)).strftime("%Y-%m-%d"),
-            auto_adjust=False,
-            progress=False,
-            actions=False,
-            threads=False,
-        )
-        if raw.empty:
-            raise RuntimeError(f"Yahoo Finance returned no data for {ticker}.")
-        if isinstance(raw.columns, pd.MultiIndex):
-            raw.columns = ["_".join(str(p) for p in col if str(p)) for col in raw.columns]
-
-        def locate(prefix: str) -> Optional[str]:
-            for column in raw.columns:
-                normalized = slugify(column)
-                if normalized == prefix or normalized.startswith(prefix + "_"):
-                    return str(column)
-            return None
-
-        close_source = locate("close")
-        if close_source is None:
-            raise RuntimeError("Yahoo Finance response has no close column.")
-
-        market = pd.DataFrame(index=pd.to_datetime(raw.index).tz_localize(None).normalize())
-        for field_name in ("open", "high", "low", "close"):
-            source = locate(field_name)
-            market[field_name] = pd.to_numeric(
-                raw[source] if source is not None else raw[close_source], errors="coerce"
-            )
-        market = market.dropna(subset=["close"]).sort_index()
-        market.index.name = "date"
-        return market
+    market = download_market(settings, daily.index.min())
+    return daily, market, f"{fear_path.relative_to(root)} + Yahoo Finance"
 
 
 # =============================================================================
 # Feature engineering + signal/market merge
 # =============================================================================
 
-def add_sentiment_features(sentiment: pd.DataFrame) -> pd.DataFrame:
-    sentiment = sentiment.sort_index().copy()
-    for window in (1, 3, 5, 10):
-        sentiment[f"change_{window}"] = sentiment["fear_greed"].diff(window)
-    return sentiment
-
-
-def add_market_features(market: pd.DataFrame) -> pd.DataFrame:
+def add_features(daily: pd.DataFrame, market: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Add rolling Fear & Greed changes to `daily` and rolling return/drawdown
+    columns to `market`. Returns (daily, market) — same two objects the
+    caller passed to merge_signals."""
+    daily = daily.sort_index().copy()
     market = market.sort_index().copy()
+
+    for window in (1, 3, 5, 10):
+        daily[f"fg_change_{window}"] = daily["fear_greed"].diff(window)
+
     market["return_1d"] = market["close"].pct_change()
     rolling_high = market["close"].rolling(20, min_periods=1).max()
     market["drawdown_from_20d_high"] = market["close"] / rolling_high - 1
-    return market
+    return daily, market
 
 
-def build_event_table(
-    sentiment: pd.DataFrame, market: pd.DataFrame, settings: Settings
-) -> pd.DataFrame:
+def merge_signals(daily: pd.DataFrame, market: pd.DataFrame, settings: Optional[Settings] = None) -> pd.DataFrame:
     """
-    Pair every sentiment reading with the *next* trading session's open (to
-    avoid look-ahead bias), then compute forward returns for each configured
-    horizon plus a rolling 20-session worst drawdown from entry.
+    Pair every Fear & Greed reading with the most recent trading session
+    at/before it (market_date), then simulate an entry on the *next*
+    available session's open (entry_date/entry_price) to avoid look-ahead
+    bias. Adds forward returns for each configured horizon plus a rolling
+    20-session worst drawdown from entry.
     """
+    settings = settings or Settings()
     market = market[~market.index.duplicated(keep="last")].sort_index()
+    if market.empty:
+        raise RuntimeError("No market data available to merge against.")
+
     position_of = {ts: i for i, ts in enumerate(market.index)}
     closes = market["close"].to_numpy()
     lows = (market["low"] if "low" in market.columns else market["close"]).to_numpy()
 
     rows: list[dict[str, Any]] = []
-    for signal_date, sentiment_row in sentiment.iterrows():
-        # Find the most recent trading session at/before the signal date.
+    for signal_date, row in daily.iterrows():
         as_of = market.index[market.index <= signal_date]
         if as_of.empty:
             continue
-        signal_position = position_of[as_of[-1]]
+        market_date = as_of[-1]
+        signal_position = position_of[market_date]
         entry_position = signal_position + 1
         if entry_position >= len(market):
             continue
@@ -385,10 +383,12 @@ def build_event_table(
 
         record: dict[str, Any] = {
             "signal_date": signal_date,
-            "fear_greed": float(sentiment_row["fear_greed"]),
-            "change_1": sentiment_row.get("change_1"),
-            "change_3": sentiment_row.get("change_3"),
-            "change_5": sentiment_row.get("change_5"),
+            "fear_greed": float(row["fear_greed"]),
+            "fg_change_1": row.get("fg_change_1"),
+            "fg_change_3": row.get("fg_change_3"),
+            "fg_change_5": row.get("fg_change_5"),
+            "fg_change_10": row.get("fg_change_10"),
+            "market_date": market_date,
             "entry_date": entry_date,
             "entry_price": entry_price,
         }
@@ -409,14 +409,14 @@ def build_event_table(
 
         rows.append(record)
 
-    events = pd.DataFrame(rows)
-    if events.empty:
+    merged = pd.DataFrame(rows)
+    if merged.empty:
         raise RuntimeError(
-            "No sentiment reading had a following trading session to enter on. "
+            "No Fear & Greed reading had a following trading session to enter on. "
             "Check that the market dataset extends at least one session past "
             "the Fear & Greed history."
         )
-    return events.sort_values("entry_date").reset_index(drop=True)
+    return merged.sort_values("entry_date").reset_index(drop=True)
 
 
 # =============================================================================
@@ -467,14 +467,14 @@ def wilson_lower_bound(successes: int, total: int, z: float = 1.96) -> float:
 def find_analogs(events: pd.DataFrame, latest: pd.Series, settings: Settings) -> tuple[pd.DataFrame, str]:
     complete = events[events["forward_5d"].notna()].copy()
     current_level = float(latest["fear_greed"])
-    current_change = latest.get("change_5", np.nan)
+    current_change = latest.get("fg_change_5", np.nan)
 
     level_mask = complete["fear_greed"].between(
         current_level - settings.analog_level_band, current_level + settings.analog_level_band
     )
 
     if pd.notna(current_change):
-        change_mask = complete["change_5"].between(
+        change_mask = complete["fg_change_5"].between(
             float(current_change) - settings.analog_change_band,
             float(current_change) + settings.analog_change_band,
         )
@@ -489,9 +489,9 @@ def find_analogs(events: pd.DataFrame, latest: pd.Series, settings: Settings) ->
     # Nothing in-band: fall back to a nearest-neighbor search by z-scored distance.
     level_scale = max(float(complete["fear_greed"].std(ddof=0)), 1.0)
     distance = ((complete["fear_greed"] - current_level) / level_scale).abs()
-    if pd.notna(current_change) and complete["change_5"].notna().any():
-        change_scale = max(float(complete["change_5"].std(ddof=0)), 1.0)
-        distance = distance + ((complete["change_5"] - float(current_change)) / change_scale).abs().fillna(1.0)
+    if pd.notna(current_change) and complete["fg_change_5"].notna().any():
+        change_scale = max(float(complete["fg_change_5"].std(ddof=0)), 1.0)
+        distance = distance + ((complete["fg_change_5"] - float(current_change)) / change_scale).abs().fillna(1.0)
 
     ranked = complete.assign(_distance=distance).sort_values("_distance")
     chosen_idx: list[int] = []
@@ -594,7 +594,7 @@ def build_event_study(events: pd.DataFrame, settings: Settings) -> pd.DataFrame:
             events, events["fear_greed"] <= threshold, settings.cooldown_calendar_days))
 
     for window in settings.drop_windows:
-        column = f"change_{window}"
+        column = f"fg_change_{window}"
         if column not in events.columns:
             continue
         for threshold in settings.drop_thresholds:
@@ -616,15 +616,15 @@ def fmt_num(value: Optional[float], digits: int = 1) -> str:
     return "N/A" if value is None or not np.isfinite(value) else f"{value:.{digits}f}"
 
 
-def render_chart(sentiment: pd.DataFrame, market: pd.DataFrame) -> str:
-    visible_market = market.loc[market.index >= sentiment.index.min()]
+def render_chart(daily: pd.DataFrame, market: pd.DataFrame) -> str:
+    visible_market = market.loc[market.index >= daily.index.min()]
     figure = go.Figure()
     figure.add_trace(go.Scatter(
         x=visible_market.index, y=visible_market["close"],
         name="S&P 500 close", line={"width": 2}, yaxis="y",
     ))
     figure.add_trace(go.Scatter(
-        x=sentiment.index, y=sentiment["fear_greed"],
+        x=daily.index, y=daily["fear_greed"],
         name="Fear & Greed", mode="lines+markers", marker={"size": 4},
         line={"width": 2}, yaxis="y2",
     ))
@@ -862,14 +862,11 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
     site_dir.mkdir(parents=True, exist_ok=True)
     settings = Settings.load(config_path)
 
-    source = DataSource(settings, root, allow_yahoo=allow_yahoo)
-    sentiment, market, source_label = source.load()
+    daily, market, source_label = load_data(settings, root, allow_yahoo=allow_yahoo)
+    daily, market = add_features(daily, market)
+    events = merge_signals(daily, market, settings)
 
-    sentiment = add_sentiment_features(sentiment)
-    market = add_market_features(market)
-    events = build_event_table(sentiment, market, settings)
-
-    latest = sentiment.iloc[-1]
+    latest = daily.iloc[-1]
     analogs, analog_method = find_analogs(events, latest, settings)
     verdict = score_analogs(analogs, events, analog_method, settings)
     study = build_event_study(events, settings)
@@ -877,7 +874,7 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
     generated = datetime.now(timezone.utc)
     build_id = generated.strftime("%Y%m%dT%H%M%SZ")
 
-    gaps = sentiment.index.to_series().diff().dt.days.dropna()
+    gaps = daily.index.to_series().diff().dt.days.dropna()
     large_gap_count = int((gaps > 7).sum())
     completed_5d = int(events["forward_5d"].notna().sum())
 
@@ -889,10 +886,10 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
     if verdict.sample_size < settings.minimum_action_sample:
         warnings.append("The action call is disabled — too few analogs in this dataset.")
 
-    latest_change_5 = latest.get("change_5")
+    latest_change_5 = latest.get("fg_change_5")
     metrics = [
         {"label": "Latest Fear & Greed", "value": fmt_num(float(latest["fear_greed"])),
-         "note": sentiment.index.max().strftime("%Y-%m-%d")},
+         "note": daily.index.max().strftime("%Y-%m-%d")},
         {"label": "5-observation change",
          "value": fmt_num(float(latest_change_5) if pd.notna(latest_change_5) else None),
          "note": "Negative means worsening sentiment"},
@@ -911,8 +908,8 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
     ]
 
     analog_columns = [
-        "signal_date", "fear_greed", "change_1", "change_3", "change_5",
-        "entry_date", "entry_price",
+        "signal_date", "fear_greed", "fg_change_1", "fg_change_3", "fg_change_5",
+        "market_date", "entry_date", "entry_price",
         *[f"forward_{h}d" for h in settings.horizons],
         "max_drawdown_20d",
     ]
@@ -927,7 +924,7 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
         verdict=verdict,
         warnings=warnings,
         metrics=metrics,
-        chart=render_chart(sentiment, market),
+        chart=render_chart(daily, market),
         event_study_table=render_table(study, {
             "Win rate 5D", "Average 5D", "Median 5D", "Average 20D",
             "Worst 5D", "Avg worst drawdown 20D", "Excess vs baseline 5D",
@@ -950,16 +947,16 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
         "build_id": build_id,
         "data_source": source_label,
         "coverage": {
-            "first_date": sentiment.index.min().date().isoformat(),
-            "last_date": sentiment.index.max().date().isoformat(),
-            "daily_observations": int(len(sentiment)),
+            "first_date": daily.index.min().date().isoformat(),
+            "last_date": daily.index.max().date().isoformat(),
+            "daily_observations": int(len(daily)),
             "completed_5d_outcomes": completed_5d,
             "gaps_over_7_days": large_gap_count,
         },
         "latest": {
-            "date": sentiment.index.max().date().isoformat(),
+            "date": daily.index.max().date().isoformat(),
             "fear_greed": float(latest["fear_greed"]),
-            "change_5": None if pd.isna(latest_change_5) else float(latest_change_5),
+            "fg_change_5": None if pd.isna(latest_change_5) else float(latest_change_5),
         },
         "verdict": asdict(verdict),
         "warnings": warnings,
@@ -971,8 +968,8 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
     )
 
     print(f"Data source : {source_label}")
-    print(f"Coverage    : {sentiment.index.min().date()} through {sentiment.index.max().date()}")
-    print(f"Observations: {len(sentiment)}")
+    print(f"Coverage    : {daily.index.min().date()} through {daily.index.max().date()}")
+    print(f"Observations: {len(daily)}")
     print(f"Action      : {verdict.action}  ({verdict.confidence} confidence, n={verdict.sample_size})")
     print(f"Site        : {site_dir / 'index.html'}")
 
@@ -981,7 +978,7 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", type=Path, default=None,
                          help="Path to config.json (default: <root>/config.json)")
-    parser.add_argument("--root", type=Path, default=ROOT, help="Repository root (default: script location)")
+    parser.add_argument("--root", type=Path, default=ROOT, help="Repository root (default: repo containing scripts/)")
     parser.add_argument("--site-dir", type=Path, default=None, help="Output directory (default: <root>/site)")
     parser.add_argument("--skip-yahoo-fallback", action="store_true",
                          help="Fail instead of downloading from Yahoo Finance when repo data is unusable")
