@@ -1043,13 +1043,14 @@ def score_analogs(
             "an extra tactical purchase; it is not an automatic sell signal."
         )
     else:
-        action = "HOLD / NORMAL BUYING"
+        action = "HOLD / NO EXTRA BUYING"
         tone = "mixed"
         confidence = "Moderate" if sample >= 30 else "Low"
         rationale = (
-            "The same-regime evidence does not establish a strong tactical edge. "
-            "Continue ordinary long-term contributions if appropriate, but the "
-            "data do not justify an above-normal purchase or an automatic sale."
+            "The same-regime evidence does not establish a positive tactical edge. "
+            "Avoid an above-normal purchase. This signal does not decide whether "
+            "to continue a separate long-term contribution plan and is not an "
+            "automatic sell signal."
         )
 
     checks = [
@@ -1496,9 +1497,10 @@ PAGE_TEMPLATE = Template(
         <p>
           BUY GRADUALLY requires a positive excess return over the same-regime
           baseline, a bootstrap confidence interval above zero, and supporting
-          return/drawdown evidence. HOLD / NORMAL BUYING means the data do not
-          justify an extra tactical purchase. WAIT ON EXTRA BUYING is not a sell
-          signal. Historical performance does not guarantee future results.
+          return/drawdown evidence. HOLD / NO EXTRA BUYING means the model does
+          not support an above-normal tactical purchase. It does not tell you to
+          stop a separate long-term contribution plan. WAIT ON EXTRA BUYING is not
+          a sell signal. Historical performance does not guarantee future results.
         </p>
       </section>
     </main>
