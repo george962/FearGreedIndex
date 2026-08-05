@@ -44,6 +44,7 @@ from typing import Any, Optional
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from jinja2 import Template
 
 try:
@@ -616,31 +617,93 @@ def fmt_num(value: Optional[float], digits: int = 1) -> str:
     return "N/A" if value is None or not np.isfinite(value) else f"{value:.{digits}f}"
 
 
+CHART_BG = "rgba(0,0,0,0)"
+CHART_GRID = "rgba(148,163,184,.14)"
+CHART_TEXT = "#a6b2c4"
+CHART_LINE = "#5aa9ff"
+SENTIMENT_SCALE = [
+    [0.0, "#c0392b"], [0.25, "#e07a3f"], [0.5, "#e8c547"],
+    [0.75, "#7fbf6b"], [1.0, "#2fa860"],
+]
+
+
 def render_chart(daily: pd.DataFrame, market: pd.DataFrame) -> str:
+    """Price as a gradient-filled area on top, Fear & Greed as a color-coded
+    sentiment ribbon underneath (red = fear, green = greed) instead of a
+    second overlaid line — easier to scan at a glance."""
     visible_market = market.loc[market.index >= daily.index.min()]
-    figure = go.Figure()
-    figure.add_trace(go.Scatter(
-        x=visible_market.index, y=visible_market["close"],
-        name="S&P 500 close", line={"width": 2}, yaxis="y",
-    ))
-    figure.add_trace(go.Scatter(
-        x=daily.index, y=daily["fear_greed"],
-        name="Fear & Greed", mode="lines+markers", marker={"size": 4},
-        line={"width": 2}, yaxis="y2",
-    ))
-    figure.add_hrect(y0=0, y1=25, yref="y2", opacity=0.08, line_width=0)
-    figure.add_hrect(y0=75, y1=100, yref="y2", opacity=0.08, line_width=0)
-    figure.update_layout(
-        template="plotly_white", height=520,
-        margin={"l": 45, "r": 55, "t": 25, "b": 40},
-        hovermode="x unified", legend={"orientation": "h", "y": 1.08},
-        yaxis={"title": "S&P 500"},
-        yaxis2={"title": "Fear & Greed", "overlaying": "y", "side": "right",
-                "range": [0, 100], "showgrid": False},
-        xaxis={"title": "Date"},
+    price = visible_market["close"]
+    pad = (price.max() - price.min()) * 0.08 or price.max() * 0.02
+
+    figure = make_subplots(
+        rows=2, cols=1, shared_xaxes=True,
+        row_heights=[0.72, 0.28], vertical_spacing=0.035,
     )
+
+    figure.add_trace(go.Scatter(
+        x=price.index, y=price.values, name="S&P 500 close",
+        mode="lines", line={"width": 2.2, "color": CHART_LINE},
+        fill="tozeroy", fillcolor="rgba(90,169,255,.14)",
+        hovertemplate="%{y:,.0f}<extra>S&P 500</extra>",
+    ), row=1, col=1)
+
+    figure.add_trace(go.Heatmap(
+        x=daily.index, y=[""], z=[daily["fear_greed"].values],
+        zmin=0, zmax=100, colorscale=SENTIMENT_SCALE, showscale=False,
+        hovertemplate="%{x|%Y-%m-%d}: %{z:.0f}<extra>Fear &amp; Greed</extra>",
+    ), row=2, col=1)
+
+    figure.add_trace(go.Scatter(
+        x=daily.index, y=daily["fear_greed"], name="Fear & Greed",
+        mode="lines", line={"width": 1.4, "color": "rgba(255,255,255,.85)"},
+        yaxis="y3", hoverinfo="skip",
+    ), row=2, col=1)
+
+    figure.update_layout(
+        template="plotly_dark", height=430,
+        paper_bgcolor=CHART_BG, plot_bgcolor=CHART_BG,
+        font={"color": CHART_TEXT, "size": 12},
+        margin={"l": 50, "r": 20, "t": 10, "b": 34},
+        hovermode="x unified", showlegend=False,
+        yaxis={"title": None, "range": [price.min() - pad, price.max() + pad],
+               "gridcolor": CHART_GRID, "zeroline": False},
+        yaxis2={"showticklabels": False, "ticks": ""},
+        yaxis3={"overlaying": "y2", "range": [0, 100], "visible": False},
+        xaxis2={"gridcolor": CHART_GRID, "title": None},
+    )
+    figure.update_xaxes(showgrid=False, row=1, col=1)
     return figure.to_html(full_html=False, include_plotlyjs="cdn",
                            config={"responsive": True, "displaylogo": False})
+
+
+def render_gauge(value: float) -> str:
+    """Semicircular gauge for the latest Fear & Greed reading, used in the
+    sidebar as a quick-glance indicator."""
+    figure = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=round(value, 1),
+        number={"suffix": "", "font": {"size": 34, "color": "#e7ecf3"}},
+        gauge={
+            "axis": {"range": [0, 100], "tickcolor": CHART_TEXT,
+                      "tickfont": {"size": 9, "color": CHART_TEXT}},
+            "bar": {"color": "rgba(255,255,255,.9)", "thickness": 0.22},
+            "bgcolor": "rgba(0,0,0,0)",
+            "borderwidth": 0,
+            "steps": [
+                {"range": [0, 25], "color": "#c0392b"},
+                {"range": [25, 45], "color": "#e07a3f"},
+                {"range": [45, 55], "color": "#e8c547"},
+                {"range": [55, 75], "color": "#7fbf6b"},
+                {"range": [75, 100], "color": "#2fa860"},
+            ],
+        },
+    ))
+    figure.update_layout(
+        height=150, paper_bgcolor=CHART_BG, font={"color": CHART_TEXT},
+        margin={"l": 18, "r": 18, "t": 8, "b": 0},
+    )
+    return figure.to_html(full_html=False, include_plotlyjs="cdn",
+                           config={"responsive": True, "displaylogo": False, "staticPlot": True})
 
 
 def render_table(frame: pd.DataFrame, percent_columns: set[str] = frozenset()) -> str:
@@ -665,95 +728,109 @@ PAGE_TEMPLATE = Template(r"""<!doctype html>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body data-build-id="{{ build_id }}" data-refresh-seconds="{{ refresh_seconds }}">
-  <header class="site-header">
-    <div>
-      <p class="eyebrow">RESEARCH DASHBOARD</p>
-      <h1>Fear &amp; Greed vs. S&amp;P 500</h1>
-      <p class="subtitle">Built from {{ source }}.</p>
-    </div>
-    <div class="updated">
-      <span>Last built</span>
-      <strong>{{ generated }}</strong>
-      <span id="refresh-status">Checking for updates…</span>
-    </div>
-  </header>
+  <div class="shell">
 
-  {% if warnings %}
-  <section class="warnings">
-    {% for warning in warnings %}
-    <div class="warning">{{ warning }}</div>
-    {% endfor %}
-  </section>
-  {% endif %}
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="dot dot-{{ verdict.tone }}"></span>
+        <div>
+          <p class="eyebrow">RESEARCH DASHBOARD</p>
+          <h1>Fear &amp; Greed<br>vs. S&amp;P 500</h1>
+        </div>
+      </div>
 
-  <main>
-    <section class="action-panel action-{{ verdict.tone }}">
-      <div>
-        <p class="eyebrow">CURRENT RESEARCH ACTION</p>
+      <div class="gauge-card">
+        {{ gauge | safe }}
+        <div class="gauge-caption">
+          <strong>{{ metrics[0].value }}</strong> fear &amp; greed
+          <span>as of {{ metrics[0].note }}</span>
+        </div>
+      </div>
+
+      <div class="verdict-card verdict-{{ verdict.tone }}">
+        <p class="eyebrow">RESEARCH ACTION</p>
         <h2>{{ verdict.action }}</h2>
-        <p>{{ verdict.rationale }}</p>
+        <p class="verdict-rationale">{{ verdict.rationale }}</p>
+        <div class="verdict-stats">
+          <div><dt>Confidence</dt><dd>{{ verdict.confidence }}</dd></div>
+          <div><dt>Analogs</dt><dd>{{ verdict.sample_size }}</dd></div>
+        </div>
+        <p class="verdict-method">Method: {{ verdict.analog_method }}</p>
       </div>
-      <dl>
-        <div><dt>Confidence</dt><dd>{{ verdict.confidence }}</dd></div>
-        <div><dt>Historical analogs</dt><dd>{{ verdict.sample_size }}</dd></div>
-        <div><dt>Analog method</dt><dd>{{ verdict.analog_method }}</dd></div>
+
+      <dl class="metric-list">
+        {% for metric in metrics[1:] %}
+        <div class="metric-row">
+          <dt>{{ metric.label }}</dt>
+          <dd>{{ metric.value }}<small>{{ metric.note }}</small></dd>
+        </div>
+        {% endfor %}
       </dl>
-    </section>
 
-    <section class="metrics">
-      {% for metric in metrics %}
-      <article class="metric">
-        <span>{{ metric.label }}</span>
-        <strong>{{ metric.value }}</strong>
-        <small>{{ metric.note }}</small>
-      </article>
-      {% endfor %}
-    </section>
-
-    <section class="panel">
-      <p class="eyebrow">MARKET CONTEXT</p>
-      <h2>Price and sentiment history</h2>
-      {{ chart | safe }}
-    </section>
-
-    <section class="panel">
-      <div class="panel-heading">
-        <div>
-          <p class="eyebrow">EVENT STUDY</p>
-          <h2>Threshold and sudden-drop backtests</h2>
-        </div>
-        <a href="event_study.csv">Download CSV</a>
+      <div class="sidebar-foot">
+        <span>Last built</span>
+        <strong>{{ generated }}</strong>
+        <span id="refresh-status">Checking for updates…</span>
+        <span class="source">{{ source }}</span>
       </div>
-      <div class="table-wrap">{{ event_study_table | safe }}</div>
-    </section>
+    </aside>
 
-    <section class="panel">
-      <div class="panel-heading">
-        <div>
-          <p class="eyebrow">CURRENT ANALOGS</p>
-          <h2>Historically similar observations</h2>
+    <main class="workspace">
+      {% if warnings %}
+      <section class="warnings">
+        {% for warning in warnings %}
+        <div class="warning">{{ warning }}</div>
+        {% endfor %}
+      </section>
+      {% endif %}
+
+      <section class="panel chart-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">MARKET CONTEXT</p>
+            <h2>Price vs. sentiment</h2>
+          </div>
+          <span class="hint">Ribbon below the price line is Fear &amp; Greed — red is fear, green is greed</span>
         </div>
-        <a href="analogs.csv">Download CSV</a>
+        {{ chart | safe }}
+      </section>
+
+      <div class="table-grid">
+        <section class="panel table-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">EVENT STUDY</p>
+              <h2>Threshold &amp; drop backtests</h2>
+            </div>
+            <a href="event_study.csv" download>CSV</a>
+          </div>
+          <div class="table-wrap">{{ event_study_table | safe }}</div>
+        </section>
+
+        <section class="panel table-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">CURRENT ANALOGS</p>
+              <h2>Similar historical setups</h2>
+            </div>
+            <a href="analogs.csv" download>CSV</a>
+          </div>
+          <div class="table-wrap">{{ analog_table | safe }}</div>
+        </section>
       </div>
-      <div class="table-wrap">{{ analog_table | safe }}</div>
-    </section>
 
-    <section class="panel">
-      <p class="eyebrow">LIMITATIONS</p>
-      <h2>How to read this</h2>
-      <p>
-        The action label is a mechanical summary of past analogs, not a
-        forecast guarantee. Fear &amp; Greed can react to the same price move
-        it's being used to predict, and a small analog sample, long data
-        gaps, or a regime change can all bias the numbers above.
-      </p>
-    </section>
-  </main>
-
-  <footer>
-    <span>Historical performance does not guarantee future results.</span>
-    <span>This page is public.</span>
-  </footer>
+      <section class="panel note-panel">
+        <p class="eyebrow">HOW TO READ THIS</p>
+        <p>
+          The action label is a mechanical summary of past analogs, not a
+          forecast guarantee. Fear &amp; Greed can react to the same price move
+          it's being used to predict, and a small analog sample, long data
+          gaps, or a regime change can all bias the numbers above.
+          Historical performance does not guarantee future results.
+        </p>
+      </section>
+    </main>
+  </div>
 
   <script src="app.js"></script>
 </body>
@@ -763,68 +840,126 @@ PAGE_TEMPLATE = Template(r"""<!doctype html>
 
 STYLES_CSS = r"""
 :root {
-  color-scheme: light dark;
-  --bg: #f4f6f8; --panel: #ffffff; --text: #111827; --muted: #5f6b7a;
-  --border: #d8dee8; --accent: #275dad;
-  --positive-bg: #eaf7f0; --positive: #137a46;
-  --negative-bg: #fbecec; --negative: #a62929;
-  --mixed-bg: #fff6dc;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color-scheme: dark;
+  --bg: #0a0e14; --sidebar: #0d1420; --panel: #111a26; --panel-2: #0d1520;
+  --text: #e7ecf3; --muted: #8a97ab; --faint: #59667a;
+  --border: #1f2c3d; --border-soft: #182131; --accent: #5aa9ff;
+  --positive: #2fa860; --positive-bg: rgba(47,168,96,.12);
+  --negative: #d1503f; --negative-bg: rgba(209,80,63,.12);
+  --mixed: #d2a72d; --mixed-bg: rgba(210,167,45,.12);
+  --neutral-bg: rgba(148,163,184,.08);
+  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); }
-.site-header, main, .warnings, footer { width: min(1180px, calc(100% - 32px)); margin-inline: auto; }
-.site-header { display: flex; justify-content: space-between; gap: 28px; align-items: end; padding: 38px 0 22px; }
-h1 { margin: 0 0 8px; font-size: clamp(2rem, 4vw, 3.4rem); }
-h2, p { margin-top: 0; }
-.subtitle, small, .updated { color: var(--muted); }
-.eyebrow { margin-bottom: 7px; color: var(--accent); font-size: .75rem; font-weight: 800; letter-spacing: .12em; }
-.updated { display: grid; gap: 4px; text-align: right; font-size: .84rem; }
-.updated strong { color: var(--text); }
-.warnings { display: grid; gap: 8px; margin-bottom: 18px; }
-.warning { padding: 12px 14px; border: 1px solid #e7c66d; border-radius: 10px; background: #fff8df; color: #644b00; }
-main { display: grid; gap: 20px; padding-bottom: 36px; }
-.panel, .action-panel, .metric { border: 1px solid var(--border); border-radius: 16px; background: var(--panel); }
-.panel { padding: 22px; }
-.action-panel { display: grid; grid-template-columns: 1.5fr 1fr; gap: 24px; padding: 26px; border-width: 2px; }
-.action-positive { border-color: var(--positive); background: var(--positive-bg); }
-.action-negative { border-color: var(--negative); background: var(--negative-bg); }
-.action-mixed { border-color: #d2a72d; background: var(--mixed-bg); }
-.action-neutral { background: #edf1f5; }
-.action-panel dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 0; }
-.action-panel dl div { padding: 12px; border: 1px solid rgba(100,116,139,.25); border-radius: 12px; background: rgba(255,255,255,.45); }
-dt { color: var(--muted); font-size: .78rem; }
-dd { margin: 6px 0 0; font-weight: 800; }
-.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-.metric { padding: 18px; }
-.metric span, .metric small { display: block; color: var(--muted); }
-.metric strong { display: block; margin: 8px 0 4px; font-size: 1.7rem; }
-.panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
-.panel-heading a { color: var(--accent); font-weight: 700; text-decoration: none; }
-.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
-.data-table { width: 100%; border-collapse: collapse; font-size: .9rem; white-space: nowrap; }
-.data-table th, .data-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: right; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, p, dl, dd, dt { margin: 0; }
+a { color: var(--accent); }
+
+/* ---------- App shell: sidebar + workspace, each scrolls on its own ---------- */
+.shell {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  height: 100vh;
+  height: 100dvh;
+}
+.sidebar {
+  background: var(--sidebar);
+  border-right: 1px solid var(--border);
+  padding: 22px 18px;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.workspace {
+  overflow-y: auto;
+  padding: 22px 26px 36px;
+  display: grid; align-content: start; gap: 16px;
+}
+
+.eyebrow { color: var(--accent); font-size: .68rem; font-weight: 800; letter-spacing: .12em; margin-bottom: 4px; }
+
+/* ---------- Sidebar ---------- */
+.brand { display: flex; align-items: center; gap: 10px; padding-bottom: 4px; }
+.brand h1 { font-size: 1.05rem; line-height: 1.25; font-weight: 800; }
+.dot { width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: 0 0 10px currentColor; }
+.dot-positive { background: var(--positive); color: var(--positive); }
+.dot-negative { background: var(--negative); color: var(--negative); }
+.dot-mixed { background: var(--mixed); color: var(--mixed); }
+.dot-neutral { background: var(--faint); color: var(--faint); }
+
+.gauge-card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+  padding: 4px 4px 10px; text-align: center;
+}
+.gauge-card .plotly-graph-div { margin: 0 auto; }
+.gauge-caption { font-size: .78rem; color: var(--muted); margin-top: -6px; }
+.gauge-caption strong { color: var(--text); font-size: .95rem; }
+.gauge-caption span { display: block; }
+
+.verdict-card {
+  border: 1px solid var(--border); border-radius: 14px; padding: 16px;
+  background: var(--neutral-bg);
+}
+.verdict-positive { border-color: rgba(47,168,96,.4); background: var(--positive-bg); }
+.verdict-negative { border-color: rgba(209,80,63,.4); background: var(--negative-bg); }
+.verdict-mixed { border-color: rgba(210,167,45,.4); background: var(--mixed-bg); }
+.verdict-card h2 { font-size: 1.3rem; letter-spacing: .01em; margin: 2px 0 8px; }
+.verdict-rationale { font-size: .84rem; color: var(--muted); line-height: 1.45; }
+.verdict-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0 8px; }
+.verdict-stats div { background: rgba(0,0,0,.18); border-radius: 9px; padding: 8px 10px; }
+.verdict-stats dt { color: var(--muted); font-size: .7rem; }
+.verdict-stats dd { font-weight: 800; margin-top: 2px; }
+.verdict-method { font-size: .74rem; color: var(--faint); }
+
+.metric-list { display: grid; gap: 1px; background: var(--border-soft); border: 1px solid var(--border-soft); border-radius: 12px; overflow: hidden; }
+.metric-row { background: var(--panel); padding: 9px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.metric-row dt { color: var(--muted); font-size: .76rem; }
+.metric-row dd { text-align: right; font-weight: 700; font-size: .86rem; }
+.metric-row dd small { display: block; font-weight: 400; color: var(--faint); font-size: .68rem; }
+
+.sidebar-foot { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border-soft); display: grid; gap: 3px; font-size: .72rem; color: var(--muted); }
+.sidebar-foot strong { color: var(--text); font-size: .78rem; }
+.sidebar-foot .source { color: var(--faint); }
+
+/* ---------- Workspace ---------- */
+.warnings { display: grid; gap: 8px; }
+.warning { padding: 10px 14px; border: 1px solid rgba(210,167,45,.4); border-radius: 10px; background: var(--mixed-bg); color: #e8cf7a; font-size: .85rem; }
+
+.panel { border: 1px solid var(--border); border-radius: 16px; background: var(--panel); padding: 18px 20px; }
+.panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 12px; flex-wrap: wrap; }
+.panel-heading h2 { font-size: 1.05rem; margin-top: 2px; }
+.panel-heading a { font-weight: 700; font-size: .82rem; text-decoration: none; border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; }
+.panel-heading a:hover { border-color: var(--accent); }
+.hint { color: var(--faint); font-size: .76rem; max-width: 260px; text-align: right; }
+
+.chart-panel .plotly-graph-div { width: 100% !important; }
+
+.table-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.table-panel { display: flex; flex-direction: column; min-width: 0; }
+.table-wrap { overflow: auto; border: 1px solid var(--border-soft); border-radius: 10px; max-height: 360px; }
+.data-table { width: 100%; border-collapse: collapse; font-size: .78rem; white-space: nowrap; }
+.data-table th, .data-table td { padding: 7px 10px; border-bottom: 1px solid var(--border-soft); text-align: right; }
 .data-table th:first-child, .data-table td:first-child { text-align: left; }
-.data-table th { background: rgba(100,116,139,.08); }
-footer { display: flex; justify-content: space-between; gap: 20px; padding: 22px 0 34px; color: var(--muted); font-size: .82rem; }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0c1118; --panel: #121a24; --text: #edf2f7; --muted: #a1acba;
-    --border: #2a3645; --accent: #83b4ff;
-    --positive-bg: #102a20; --negative-bg: #301616; --mixed-bg: #2e260f;
-  }
-  .warning { background: #2e260f; color: #f5d77d; border-color: #65551f; }
-  .action-neutral { background: #17212d; }
-  .action-panel dl div { background: rgba(0,0,0,.12); }
+.data-table thead th { position: sticky; top: 0; background: var(--panel-2); color: var(--muted); font-weight: 700; z-index: 1; }
+.data-table tbody tr:hover { background: rgba(90,169,255,.06); }
+
+.note-panel p { font-size: .8rem; color: var(--muted); line-height: 1.5; }
+
+/* ---------- Responsive: collapse to a single scrolling column ---------- */
+@media (max-width: 980px) {
+  .table-grid { grid-template-columns: 1fr; }
 }
-@media (max-width: 850px) {
-  .site-header { display: grid; align-items: start; }
-  .updated { text-align: left; }
-  .action-panel { grid-template-columns: 1fr; }
-  .action-panel dl { grid-template-columns: 1fr; }
-  .metrics { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 860px) {
+  .shell { grid-template-columns: 1fr; height: auto; }
+  .sidebar { border-right: none; border-bottom: 1px solid var(--border); overflow-y: visible; }
+  .workspace { overflow-y: visible; padding: 18px 16px 30px; }
+  .metric-list { grid-template-columns: 1fr 1fr; display: grid; }
+  .verdict-stats { grid-template-columns: 1fr 1fr; }
+  .hint { text-align: left; max-width: none; }
 }
-@media (max-width: 520px) { .metrics { grid-template-columns: 1fr; } }
 """
 
 
@@ -925,6 +1060,7 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
         warnings=warnings,
         metrics=metrics,
         chart=render_chart(daily, market),
+        gauge=render_gauge(float(latest["fear_greed"])),
         event_study_table=render_table(study, {
             "Win rate 5D", "Average 5D", "Median 5D", "Average 20D",
             "Worst 5D", "Avg worst drawdown 20D", "Excess vs baseline 5D",
