@@ -3,17 +3,7 @@ name: Update Fear and Greed SPX Dataset
 run-name: Update Fear and Greed SPX Dataset
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - FearGreedMarketData.py
-      - test_fear_greed_market_data.py
-      - requirements.txt
-      - .github/workflows/market_data.yml
-
   workflow_dispatch:
-
 
   workflow_run:
     workflows:
