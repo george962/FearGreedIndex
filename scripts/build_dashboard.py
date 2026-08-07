@@ -1034,13 +1034,13 @@ def score_analogs(
         and negative_confidence_ok
         and sum(negative_support) >= 3
     ):
-        action = "WAIT ON EXTRA BUYING"
+        action = "WAIT ON BUYING"
         tone = "negative"
         confidence = "Moderate" if sample >= 30 else "Low"
         rationale = (
             "Same-regime analogs showed statistically negative excess returns and "
-            "most short-term outcome tests were unfavorable. This means postpone "
-            "an extra tactical purchase; it is not an automatic sell signal."
+            "most short-term outcome tests were unfavorable. This means wait on "
+            "buying for now; it is not an automatic sell signal."
         )
     else:
         action = "HOLD / NO EXTRA BUYING"
@@ -1499,7 +1499,7 @@ PAGE_TEMPLATE = Template(
           baseline, a bootstrap confidence interval above zero, and supporting
           return/drawdown evidence. HOLD / NO EXTRA BUYING means the model does
           not support an above-normal tactical purchase. It does not tell you to
-          stop a separate long-term contribution plan. WAIT ON EXTRA BUYING is not
+          stop a separate long-term contribution plan. WAIT ON BUYING is not
           a sell signal. Historical performance does not guarantee future results.
         </p>
       </section>
