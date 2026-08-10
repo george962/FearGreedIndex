@@ -1,0 +1,9 @@
+{
+  "ticker": "TQQQ",
+  "target_allocation_pct": 50,
+  "total_portfolio_value": 20000,
+  "lots": [
+    {"date": "2026-06-01", "shares": 30, "price": 62.30},
+    {"date": "2026-07-15", "shares": 15, "price": 58.10}
+  ]
+}
