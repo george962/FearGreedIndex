@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# FAST TIMING VERSION 2 — early buy/trim layer integrated
 """
 scripts/build_dashboard.py
 
@@ -38,6 +39,8 @@ Generated output, under site/ by default:
     version.json
     historical_decisions.csv
     decision_changes.csv
+    timing_decision_changes.csv
+    timing_evaluation.csv
     historical_decisions.json
     decision_history.html
 """
@@ -71,8 +74,11 @@ except ImportError:
 ROOT = Path(__file__).resolve().parents[1]
 
 MARKET_CONTEXT_COLUMNS = [
+    "market_return_3d",
     "market_return_5d",
     "market_return_20d",
+    "distance_from_3d_low",
+    "distance_from_3d_high",
     "distance_from_20d_high",
     "distance_from_252d_high",
     "distance_from_record_high",
@@ -89,6 +95,20 @@ HISTORY_OUTPUT_COLUMNS = [
     "fg_change_5",
     "market_regime",
     "market_extension",
+    "timing_action",
+    "timing_tone",
+    "timing_side",
+    "timing_score",
+    "timing_confirmation_count",
+    "timing_confirmation_total",
+    "timing_recommendation",
+    "timing_rationale",
+    "recent_fg_low_5",
+    "recent_fg_high_5",
+    "distance_from_252d_high",
+    "market_return_3d",
+    "market_return_5d",
+    "market_return_20d",
     "action",
     "confidence",
     "sizing_tier",
@@ -159,6 +179,20 @@ class Settings:
     sizing_modest_buy_low_pct: int = 110
     sizing_modest_buy_high_pct: int = 125
     sizing_strong_buy_min_checks_ratio: float = 0.8
+
+    # Fast timing layer. This layer intentionally reacts before the slower
+    # analog/bootstrap confirmation model. It uses only information available
+    # on the decision date and never uses future returns to create a signal.
+    timing_recent_sentiment_observations: int = 5
+    timing_buy_watch_score: int = 35
+    timing_buy_zone_score: int = 55
+    timing_buy_first_tranche_score: int = 75
+    timing_buy_small_start_confirmations: int = 3
+    timing_buy_first_tranche_confirmations: int = 2
+    timing_trim_watch_score: int = 35
+    timing_trim_zone_score: int = 55
+    timing_trim_strong_score: int = 70
+    timing_trim_confirmations: int = 2
 
     @classmethod
     def load(cls, path: Path) -> "Settings":
@@ -512,15 +546,20 @@ def add_features(
     daily_return = close.pct_change()
 
     market["return_1d"] = daily_return
+    market["market_return_3d"] = close.pct_change(3)
     market["market_return_5d"] = close.pct_change(5)
     market["market_return_20d"] = close.pct_change(20)
 
+    low_3 = close.rolling(3, min_periods=2).min()
+    high_3 = close.rolling(3, min_periods=2).max()
     high_20 = close.rolling(20, min_periods=5).max()
     high_252 = close.rolling(252, min_periods=60).max()
     record_high = close.expanding(min_periods=1).max()
     sma_50 = close.rolling(50, min_periods=20).mean()
     sma_200 = close.rolling(200, min_periods=60).mean()
 
+    market["distance_from_3d_low"] = close / low_3 - 1
+    market["distance_from_3d_high"] = close / high_3 - 1
     market["drawdown_from_20d_high"] = close / high_20 - 1
     market["distance_from_20d_high"] = close / high_20 - 1
     market["distance_from_252d_high"] = close / high_252 - 1
@@ -645,6 +684,7 @@ def build_current_context(daily: pd.DataFrame, market: pd.DataFrame) -> pd.Serie
     market_date = available_dates[-1]
     market_row = market.loc[market_date]
 
+    recent_sentiment = daily["fear_greed"].tail(5)
     context: dict[str, Any] = {
         "signal_date": latest_date,
         "market_date": market_date,
@@ -654,12 +694,349 @@ def build_current_context(daily: pd.DataFrame, market: pd.DataFrame) -> pd.Serie
         "fg_change_5": _plain_value(sentiment_row.get("fg_change_5")),
         "fg_change_10": _plain_value(sentiment_row.get("fg_change_10")),
         "market_close": _plain_value(market_row.get("close")),
+        "recent_fg_low_5": (
+            float(recent_sentiment.min()) if not recent_sentiment.empty else None
+        ),
+        "recent_fg_high_5": (
+            float(recent_sentiment.max()) if not recent_sentiment.empty else None
+        ),
     }
 
     for column in MARKET_CONTEXT_COLUMNS:
         context[column] = _plain_value(market_row.get(column))
 
     return pd.Series(context)
+
+
+# =============================================================================
+# Fast timing layer
+# =============================================================================
+
+@dataclass
+class TimingCheck:
+    label: str
+    value: str
+    passed: bool
+
+
+@dataclass
+class TimingSignal:
+    action: str
+    tone: str
+    side: str
+    score: int
+    confirmation_count: int
+    confirmation_total: int
+    recommendation: str
+    rationale: str
+    recent_fg_low_5: Optional[float]
+    recent_fg_high_5: Optional[float]
+    checks: list[TimingCheck]
+
+
+def _finite_float(value: Any) -> Optional[float]:
+    if value is None or pd.isna(value):
+        return None
+    number = float(value)
+    return number if math.isfinite(number) else None
+
+
+def _score_at_least(value: Optional[float], threshold: float, points: int) -> int:
+    return points if value is not None and value >= threshold else 0
+
+
+def _score_at_most(value: Optional[float], threshold: float, points: int) -> int:
+    return points if value is not None and value <= threshold else 0
+
+
+def score_fast_timing(
+    daily: pd.DataFrame,
+    market: pd.DataFrame,
+    current: pd.Series,
+    settings: Settings,
+) -> TimingSignal:
+    """
+    Produce an earlier tactical timing signal without waiting for a large
+    analog sample.
+
+    This layer is deliberately separate from score_analogs(). It only uses
+    backward-looking/current-date sentiment and price information. Future
+    local lows/highs are never used here; they are used only later by the
+    evaluation helper.
+    """
+    lookback = max(2, int(settings.timing_recent_sentiment_observations))
+    recent_sentiment = pd.to_numeric(
+        daily.loc[daily.index <= pd.Timestamp(current["signal_date"]), "fear_greed"],
+        errors="coerce",
+    ).dropna().tail(lookback)
+
+    current_fg = _finite_float(current.get("fear_greed"))
+    recent_low = (
+        float(recent_sentiment.min()) if not recent_sentiment.empty else current_fg
+    )
+    recent_high = (
+        float(recent_sentiment.max()) if not recent_sentiment.empty else current_fg
+    )
+
+    fg_change_1 = _finite_float(current.get("fg_change_1"))
+    fg_change_3 = _finite_float(current.get("fg_change_3"))
+    return_1d = None
+    market_date = pd.Timestamp(current["market_date"])
+    if market_date in market.index:
+        return_1d = _finite_float(market.loc[market_date].get("return_1d"))
+    return_3d = _finite_float(current.get("market_return_3d"))
+    return_5d = _finite_float(current.get("market_return_5d"))
+    return_20d = _finite_float(current.get("market_return_20d"))
+    distance_high = _finite_float(current.get("distance_from_252d_high"))
+    distance_sma50 = _finite_float(current.get("distance_from_sma_50"))
+    distance_sma200 = _finite_float(current.get("distance_from_sma_200"))
+    distance_3d_low = _finite_float(current.get("distance_from_3d_low"))
+    distance_3d_high = _finite_float(current.get("distance_from_3d_high"))
+    volatility = _finite_float(current.get("volatility_20d"))
+
+    # Stress score: high score means fear + price damage are already unusual.
+    buy_score = 0
+    buy_score += _score_at_most(recent_low, 30, 10)
+    buy_score += _score_at_most(recent_low, 25, 15)
+    buy_score += _score_at_most(recent_low, 20, 15)
+    buy_score += _score_at_most(recent_low, 15, 10)
+    buy_score += _score_at_most(distance_high, -0.05, 10)
+    buy_score += _score_at_most(distance_high, -0.08, 10)
+    buy_score += _score_at_most(distance_high, -0.12, 15)
+    buy_score += _score_at_most(return_5d, -0.03, 10)
+    buy_score += _score_at_most(return_5d, -0.05, 10)
+    buy_score += _score_at_most(return_20d, -0.08, 10)
+    buy_score += _score_at_least(volatility, 0.25, 5)
+
+    buy_checks = [
+        TimingCheck(
+            "Fear & Greed rebounding from recent low",
+            (
+                "N/A"
+                if current_fg is None or recent_low is None
+                else f"{current_fg:.1f} vs {recent_low:.1f} low"
+            ),
+            current_fg is not None
+            and recent_low is not None
+            and current_fg >= recent_low + 2.0,
+        ),
+        TimingCheck(
+            "1-observation sentiment change positive",
+            "N/A" if fg_change_1 is None else f"{fg_change_1:+.1f}",
+            fg_change_1 is not None and fg_change_1 > 0,
+        ),
+        TimingCheck(
+            "3-observation sentiment change positive",
+            "N/A" if fg_change_3 is None else f"{fg_change_3:+.1f}",
+            fg_change_3 is not None and fg_change_3 > 0,
+        ),
+        TimingCheck(
+            "Market positive today",
+            "N/A" if return_1d is None else f"{return_1d * 100:+.2f}%",
+            return_1d is not None and return_1d > 0,
+        ),
+        TimingCheck(
+            "3-day market momentum stabilized",
+            "N/A" if return_3d is None else f"{return_3d * 100:+.2f}%",
+            return_3d is not None and return_3d > -0.005,
+        ),
+        TimingCheck(
+            "Price bounced from 3-day low",
+            "N/A" if distance_3d_low is None else f"{distance_3d_low * 100:.2f}%",
+            distance_3d_low is not None and distance_3d_low >= 0.008,
+        ),
+    ]
+    buy_confirmations = sum(check.passed for check in buy_checks)
+
+    # Heat score: high score means greed/extension are elevated.
+    trim_score = 0
+    trim_score += _score_at_least(recent_high, 70, 10)
+    trim_score += _score_at_least(recent_high, 75, 15)
+    trim_score += _score_at_least(recent_high, 80, 15)
+    trim_score += _score_at_least(recent_high, 85, 10)
+    trim_score += _score_at_least(distance_high, -0.015, 10)
+    trim_score += _score_at_least(return_20d, 0.04, 10)
+    trim_score += _score_at_least(return_20d, 0.07, 10)
+    trim_score += _score_at_least(distance_sma50, 0.03, 10)
+    trim_score += _score_at_least(distance_sma200, 0.10, 10)
+    trim_score += _score_at_least(distance_sma200, 0.15, 10)
+
+    trim_checks = [
+        TimingCheck(
+            "Fear & Greed rolling over from recent high",
+            (
+                "N/A"
+                if current_fg is None or recent_high is None
+                else f"{current_fg:.1f} vs {recent_high:.1f} high"
+            ),
+            current_fg is not None
+            and recent_high is not None
+            and current_fg <= recent_high - 3.0,
+        ),
+        TimingCheck(
+            "1-observation sentiment change negative",
+            "N/A" if fg_change_1 is None else f"{fg_change_1:+.1f}",
+            fg_change_1 is not None and fg_change_1 < 0,
+        ),
+        TimingCheck(
+            "3-observation sentiment change negative",
+            "N/A" if fg_change_3 is None else f"{fg_change_3:+.1f}",
+            fg_change_3 is not None and fg_change_3 < 0,
+        ),
+        TimingCheck(
+            "Market negative today",
+            "N/A" if return_1d is None else f"{return_1d * 100:+.2f}%",
+            return_1d is not None and return_1d < 0,
+        ),
+        TimingCheck(
+            "3-day market momentum negative",
+            "N/A" if return_3d is None else f"{return_3d * 100:+.2f}%",
+            return_3d is not None and return_3d < 0,
+        ),
+        TimingCheck(
+            "Price slipped from 3-day high",
+            "N/A" if distance_3d_high is None else f"{distance_3d_high * 100:.2f}%",
+            distance_3d_high is not None and distance_3d_high <= -0.008,
+        ),
+    ]
+    trim_confirmations = sum(check.passed for check in trim_checks)
+
+    # Prefer the side with the stronger setup when both scores are non-trivial.
+    buy_active = buy_score >= settings.timing_buy_watch_score
+    trim_active = trim_score >= settings.timing_trim_watch_score
+    if buy_active and trim_active:
+        if buy_score - settings.timing_buy_watch_score >= trim_score - settings.timing_trim_watch_score:
+            trim_active = False
+        else:
+            buy_active = False
+
+    if buy_active:
+        if (
+            buy_score >= settings.timing_buy_first_tranche_score
+            and buy_confirmations >= settings.timing_buy_first_tranche_confirmations
+        ):
+            action = "EARLY BUY — FIRST TRANCHE"
+            tone = "positive"
+            recommendation = "Start ~25–35% of the tactical amount you planned to deploy."
+            rationale = (
+                "Fear/price stress is already extreme and at least two stabilization "
+                "checks have turned. This is intentionally earlier than BUY GRADUALLY."
+            )
+        elif (
+            buy_score >= settings.timing_buy_zone_score
+            and buy_confirmations >= settings.timing_buy_small_start_confirmations
+        ):
+            action = "EARLY BUY — SMALL START"
+            tone = "positive"
+            recommendation = "Start ~10–20% of the tactical amount; keep most cash reserved."
+            rationale = (
+                "The market is meaningfully oversold and several stabilization checks "
+                "have turned, but confirmation is still incomplete."
+            )
+        elif buy_score >= settings.timing_buy_zone_score:
+            action = "EXTREME BUY ZONE — WAIT FOR STABILIZATION"
+            tone = "mixed"
+            recommendation = "Do not deploy the full amount yet; wait for 2–3 stabilization checks."
+            rationale = (
+                "Fear and/or drawdown are extreme, but selling pressure has not shown "
+                "enough evidence of slowing."
+            )
+        else:
+            action = "BUY WATCH — OVERSOLD"
+            tone = "mixed"
+            recommendation = "Prepare cash and a staged plan; no early tranche yet."
+            rationale = (
+                "Stress is elevated enough to watch closely, but the setup is not yet "
+                "extreme or stable enough for an early tactical buy."
+            )
+        return TimingSignal(
+            action=action,
+            tone=tone,
+            side="BUY",
+            score=int(buy_score),
+            confirmation_count=int(buy_confirmations),
+            confirmation_total=len(buy_checks),
+            recommendation=recommendation,
+            rationale=rationale,
+            recent_fg_low_5=recent_low,
+            recent_fg_high_5=recent_high,
+            checks=buy_checks,
+        )
+
+    if trim_active:
+        if (
+            trim_score >= settings.timing_trim_strong_score
+            and trim_confirmations >= settings.timing_trim_confirmations + 1
+        ):
+            action = "EARLY TRIM — REDUCE TACTICAL RISK"
+            tone = "negative"
+            recommendation = "Consider trimming ~15–25% of tactical/overweight exposure."
+            rationale = (
+                "The market is highly extended and multiple rollover checks have "
+                "turned negative. This is an early risk-reduction signal, not a call "
+                "to liquidate a long-term core position."
+            )
+        elif (
+            trim_score >= settings.timing_trim_zone_score
+            and trim_confirmations >= settings.timing_trim_confirmations
+        ):
+            action = "EARLY TRIM / CAUTION"
+            tone = "negative"
+            recommendation = "Stop extra buying; optionally trim ~5–15% of tactical exposure."
+            rationale = (
+                "Greed/extension are elevated and rollover evidence has started to "
+                "appear before the slower analog model turns negative."
+            )
+        elif trim_score >= settings.timing_trim_zone_score:
+            action = "OVERHEATED — NO EXTRA BUYING"
+            tone = "mixed"
+            recommendation = "Pause discretionary adds; wait for rollover confirmation before trimming."
+            rationale = (
+                "The market is stretched, but price/sentiment have not rolled over "
+                "enough to justify an early trim."
+            )
+        else:
+            action = "OVERHEATED WATCH"
+            tone = "mixed"
+            recommendation = "Keep normal holdings; avoid chasing strength."
+            rationale = (
+                "Extension is elevated enough to monitor, but the setup is not yet "
+                "strong enough for a trim signal."
+            )
+        return TimingSignal(
+            action=action,
+            tone=tone,
+            side="TRIM",
+            score=int(trim_score),
+            confirmation_count=int(trim_confirmations),
+            confirmation_total=len(trim_checks),
+            recommendation=recommendation,
+            rationale=rationale,
+            recent_fg_low_5=recent_low,
+            recent_fg_high_5=recent_high,
+            checks=trim_checks,
+        )
+
+    neutral_checks = [
+        TimingCheck("No extreme buy stress", f"buy score {buy_score}", True),
+        TimingCheck("No extreme trim heat", f"trim score {trim_score}", True),
+    ]
+    return TimingSignal(
+        action="NEUTRAL / NO TIMING EDGE",
+        tone="neutral",
+        side="NEUTRAL",
+        score=int(max(buy_score, trim_score)),
+        confirmation_count=0,
+        confirmation_total=0,
+        recommendation="Follow the baseline plan; no fast tactical action is indicated.",
+        rationale=(
+            "Neither the oversold-stress score nor the overheated-extension score "
+            "is high enough to justify an early tactical action."
+        ),
+        recent_fg_low_5=recent_low,
+        recent_fg_high_5=recent_high,
+        checks=neutral_checks,
+    )
 
 
 # =============================================================================
@@ -1555,6 +1932,12 @@ def replay_historical_decisions(
             settings,
         )
         historical_guidance = build_position_guidance(historical_verdict, settings)
+        historical_timing = score_fast_timing(
+            daily_asof,
+            market_asof,
+            current,
+            settings,
+        )
 
         rows.append(
             {
@@ -1564,6 +1947,22 @@ def replay_historical_decisions(
                 "fg_change_5": _plain_history_value(current.get("fg_change_5")),
                 "market_regime": historical_verdict.market_regime,
                 "market_extension": historical_verdict.market_extension,
+                "timing_action": historical_timing.action,
+                "timing_tone": historical_timing.tone,
+                "timing_side": historical_timing.side,
+                "timing_score": historical_timing.score,
+                "timing_confirmation_count": historical_timing.confirmation_count,
+                "timing_confirmation_total": historical_timing.confirmation_total,
+                "timing_recommendation": historical_timing.recommendation,
+                "timing_rationale": historical_timing.rationale,
+                "recent_fg_low_5": _plain_history_value(historical_timing.recent_fg_low_5),
+                "recent_fg_high_5": _plain_history_value(historical_timing.recent_fg_high_5),
+                "distance_from_252d_high": _plain_history_value(
+                    current.get("distance_from_252d_high")
+                ),
+                "market_return_3d": _plain_history_value(current.get("market_return_3d")),
+                "market_return_5d": _plain_history_value(current.get("market_return_5d")),
+                "market_return_20d": _plain_history_value(current.get("market_return_20d")),
                 "action": historical_verdict.action,
                 "confidence": historical_verdict.confidence,
                 "sizing_tier": historical_guidance.tier,
@@ -1607,6 +2006,96 @@ def decision_change_rows(history: pd.DataFrame) -> pd.DataFrame:
         return history.copy()
     changed = history["action"].ne(history["action"].shift(1))
     return history.loc[changed].reset_index(drop=True)
+
+
+def timing_change_rows(history: pd.DataFrame) -> pd.DataFrame:
+    """Return dates when the fast timing action changes."""
+    if history.empty or "timing_action" not in history.columns:
+        return history.iloc[0:0].copy()
+    changed = history["timing_action"].ne(history["timing_action"].shift(1))
+    return history.loc[changed].reset_index(drop=True)
+
+
+def evaluate_timing_signals(
+    timing_changes: pd.DataFrame,
+    market: pd.DataFrame,
+    *,
+    window_sessions: int = 10,
+) -> pd.DataFrame:
+    """
+    Evaluate early signals against the local low/high in a +/- window.
+
+    IMPORTANT: this function is diagnostics only. It runs after signals are
+    generated and its output is never fed back into score_fast_timing().
+    Positive trading_days_to_extreme means the signal came before the local
+    turning point; negative means it came after.
+    """
+    columns = [
+        "decision_date",
+        "market_date",
+        "timing_action",
+        "side",
+        "signal_price",
+        "local_extreme_date",
+        "local_extreme_price",
+        "trading_days_to_extreme",
+        "price_gap_to_extreme",
+    ]
+    if timing_changes.empty:
+        return pd.DataFrame(columns=columns)
+
+    market_sorted = market.sort_index()
+    market_index = pd.DatetimeIndex(market_sorted.index)
+    closes = pd.to_numeric(market_sorted["close"], errors="coerce")
+
+    records: list[dict[str, Any]] = []
+    for _, row in timing_changes.iterrows():
+        action = str(row.get("timing_action", ""))
+        if not (action.startswith("EARLY BUY") or action.startswith("EARLY TRIM")):
+            continue
+
+        signal_market_date = _as_timestamp(row["market_date"])
+        if signal_market_date not in market_index:
+            continue
+
+        pos = int(market_index.get_loc(signal_market_date))
+        start = max(0, pos - window_sessions)
+        end = min(len(market_index), pos + window_sessions + 1)
+        window = closes.iloc[start:end].dropna()
+        if window.empty:
+            continue
+
+        if action.startswith("EARLY BUY"):
+            extreme_date = window.idxmin()
+            side = "BUY"
+        else:
+            extreme_date = window.idxmax()
+            side = "TRIM"
+
+        extreme_pos = int(market_index.get_loc(extreme_date))
+        signal_price = float(closes.iloc[pos])
+        extreme_price = float(closes.loc[extreme_date])
+        price_gap = (
+            signal_price / extreme_price - 1.0
+            if side == "BUY"
+            else extreme_price / signal_price - 1.0
+        )
+
+        records.append(
+            {
+                "decision_date": row["decision_date"],
+                "market_date": row["market_date"],
+                "timing_action": action,
+                "side": side,
+                "signal_price": signal_price,
+                "local_extreme_date": pd.Timestamp(extreme_date).date().isoformat(),
+                "local_extreme_price": extreme_price,
+                "trading_days_to_extreme": extreme_pos - pos,
+                "price_gap_to_extreme": price_gap,
+            }
+        )
+
+    return pd.DataFrame(records, columns=columns)
 
 
 def _history_records(frame: pd.DataFrame) -> list[dict[str, Any]]:
@@ -1667,7 +2156,11 @@ SENTIMENT_SCALE = [
 ]
 
 
-def render_chart(daily: pd.DataFrame, market: pd.DataFrame) -> str:
+def render_chart(
+    daily: pd.DataFrame,
+    market: pd.DataFrame,
+    timing_changes: Optional[pd.DataFrame] = None,
+) -> str:
     visible_market = market.loc[market.index >= daily.index.min()]
     price = visible_market["close"]
     padding = (price.max() - price.min()) * 0.08 or price.max() * 0.02
@@ -1726,6 +2219,50 @@ def render_chart(daily: pd.DataFrame, market: pd.DataFrame) -> str:
         col=1,
     )
 
+    if timing_changes is not None and not timing_changes.empty:
+        marker_specs = [
+            ("EARLY BUY", "triangle-up", "#67d391", "Early buy"),
+            ("EARLY TRIM", "triangle-down", "#ee796b", "Early trim"),
+        ]
+        for prefix, symbol, color, label in marker_specs:
+            subset = timing_changes[
+                timing_changes["timing_action"].astype(str).str.startswith(prefix)
+            ].copy()
+            if subset.empty:
+                continue
+            x_values: list[pd.Timestamp] = []
+            y_values: list[float] = []
+            hover_text: list[str] = []
+            for _, row in subset.iterrows():
+                market_date = pd.Timestamp(row["market_date"])
+                if market_date not in market.index:
+                    continue
+                x_values.append(market_date)
+                y_values.append(float(market.loc[market_date, "close"]))
+                hover_text.append(
+                    f'{row["timing_action"]}<br>F&G {float(row["fear_greed"]):.1f}'
+                    f'<br>Score {int(row["timing_score"])}'
+                )
+            if x_values:
+                figure.add_trace(
+                    go.Scatter(
+                        x=x_values,
+                        y=y_values,
+                        mode="markers",
+                        name=label,
+                        marker={
+                            "symbol": symbol,
+                            "size": 11,
+                            "color": color,
+                            "line": {"width": 1, "color": "rgba(255,255,255,.7)"},
+                        },
+                        text=hover_text,
+                        hovertemplate="%{text}<extra></extra>",
+                    ),
+                    row=1,
+                    col=1,
+                )
+
     figure.update_layout(
         template="plotly_dark",
         height=430,
@@ -1734,7 +2271,8 @@ def render_chart(daily: pd.DataFrame, market: pd.DataFrame) -> str:
         font={"color": CHART_TEXT, "size": 12},
         margin={"l": 50, "r": 20, "t": 10, "b": 34},
         hovermode="x unified",
-        showlegend=False,
+        showlegend=timing_changes is not None and not timing_changes.empty,
+        legend={"orientation": "h", "y": 1.02, "x": 0.0},
         yaxis={
             "title": None,
             "range": [price.min() - padding, price.max() + padding],
@@ -1902,6 +2440,14 @@ def _history_num(value: Any, digits: int = 1) -> str:
 
 
 def _history_action_class(action: str) -> str:
+    if action.startswith("EARLY BUY"):
+        return "buy"
+    if action.startswith("EARLY TRIM"):
+        return "wait"
+    if action in {"EXTREME BUY ZONE — WAIT FOR STABILIZATION", "BUY WATCH — OVERSOLD"}:
+        return "hold"
+    if action in {"OVERHEATED — NO EXTRA BUYING", "OVERHEATED WATCH"}:
+        return "hold"
     if action == "BUY GRADUALLY":
         return "buy"
     if action == "WAIT ON BUYING":
@@ -1909,6 +2455,33 @@ def _history_action_class(action: str) -> str:
     if action == "HOLD / NO EXTRA BUYING":
         return "hold"
     return "insufficient"
+
+
+def _render_timing_rows(frame: pd.DataFrame) -> str:
+    if frame.empty:
+        return '<tr><td colspan="11" class="empty">No timing decisions in this view.</td></tr>'
+
+    rendered: list[str] = []
+    for _, row in frame.iterrows():
+        action = str(row["timing_action"])
+        rendered.append(
+            "<tr "
+            f'data-timing-action="{html_lib.escape(action, quote=True)}" '
+            f'data-side="{html_lib.escape(str(row.get("timing_side", "")), quote=True)}">'
+            f'<td>{html_lib.escape(str(row["decision_date"]))}</td>'
+            f'<td><span class="action action-{_history_action_class(action)}">{html_lib.escape(action)}</span></td>'
+            f'<td>{_history_num(row.get("fear_greed"), 1)}</td>'
+            f'<td>{_history_num(row.get("recent_fg_low_5"), 1)}</td>'
+            f'<td>{_history_num(row.get("recent_fg_high_5"), 1)}</td>'
+            f'<td>{int(row.get("timing_score", 0))}</td>'
+            f'<td>{int(row.get("timing_confirmation_count", 0))}/{int(row.get("timing_confirmation_total", 0))}</td>'
+            f'<td>{html_lib.escape(str(row.get("market_regime", "")))}</td>'
+            f'<td>{_history_pct(row.get("distance_from_252d_high")) if "distance_from_252d_high" in row else "—"}</td>'
+            f'<td>{html_lib.escape(str(row.get("timing_recommendation", "")))}</td>'
+            f'<td>{html_lib.escape(str(row.get("action", "")))}</td>'
+            "</tr>"
+        )
+    return "\n".join(rendered)
 
 
 def _render_history_rows(frame: pd.DataFrame) -> str:
@@ -1943,17 +2516,39 @@ def _render_history_rows(frame: pd.DataFrame) -> str:
 def render_history_page(
     history: pd.DataFrame,
     changes: pd.DataFrame,
+    timing_changes: pd.DataFrame,
+    timing_evaluation: pd.DataFrame,
     *,
     generated_at: datetime,
     data_source: str,
 ) -> str:
     counts = history["action"].value_counts().to_dict() if not history.empty else {}
+    timing_counts = (
+        history["timing_action"].value_counts().to_dict()
+        if not history.empty and "timing_action" in history.columns
+        else {}
+    )
     buy_count = int(counts.get("BUY GRADUALLY", 0))
     wait_count = int(counts.get("WAIT ON BUYING", 0))
-    hold_count = int(counts.get("HOLD / NO EXTRA BUYING", 0))
-    insufficient_count = int(counts.get("INSUFFICIENT EVIDENCE", 0))
+    early_buy_count = int(
+        sum(count for action, count in timing_counts.items() if str(action).startswith("EARLY BUY"))
+    )
+    early_trim_count = int(
+        sum(count for action, count in timing_counts.items() if str(action).startswith("EARLY TRIM"))
+    )
     first_date = str(history.iloc[0]["decision_date"]) if not history.empty else "—"
     last_date = str(history.iloc[-1]["decision_date"]) if not history.empty else "—"
+
+    eval_buy = timing_evaluation[timing_evaluation["side"] == "BUY"] if not timing_evaluation.empty else timing_evaluation
+    eval_trim = timing_evaluation[timing_evaluation["side"] == "TRIM"] if not timing_evaluation.empty else timing_evaluation
+
+    def timing_eval_summary(frame: pd.DataFrame) -> str:
+        if frame.empty:
+            return "No evaluated signals yet"
+        median_days = float(frame["trading_days_to_extreme"].median())
+        median_gap = float(frame["price_gap_to_extreme"].median()) * 100
+        relation = "before" if median_days >= 0 else "after"
+        return f"Median {abs(median_days):.1f} sessions {relation} local turn · {median_gap:.2f}% price gap"
 
     return f"""<!doctype html>
 <html lang="en">
@@ -1965,20 +2560,16 @@ def render_history_page(
   <link rel="stylesheet" href="styles.css">
   <style>
     body {{ min-height:100vh; }}
-    .history-shell {{ max-width:1500px; margin:0 auto; padding:24px; }}
+    .history-shell {{ max-width:1600px; margin:0 auto; padding:24px; }}
     .history-top {{ display:flex; justify-content:space-between; gap:18px; align-items:flex-start; flex-wrap:wrap; margin-bottom:16px; }}
     .history-top h1 {{ font-size:1.5rem; margin:3px 0 6px; }}
-    .history-top p {{ color:var(--muted); max-width:950px; line-height:1.5; font-size:.86rem; }}
+    .history-top p {{ color:var(--muted); max-width:1050px; line-height:1.5; font-size:.86rem; }}
     .back-link {{ text-decoration:none; border:1px solid var(--border); border-radius:9px; padding:8px 12px; font-weight:700; }}
     .summary-grid {{ display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; margin-bottom:16px; }}
     .summary-card {{ background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; }}
     .summary-card small {{ display:block; color:var(--muted); font-size:.68rem; margin-bottom:4px; }}
-    .summary-card strong {{ font-size:1.1rem; }}
-    .controls {{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }}
-    .filter-btn {{ border:1px solid var(--border); background:var(--panel-2); color:var(--text); border-radius:999px; padding:7px 11px; cursor:pointer; font-weight:700; font-size:.75rem; }}
-    .filter-btn.active {{ border-color:var(--accent); color:var(--accent); }}
-    .view-switch {{ margin-left:auto; }}
-    .history-table-wrap {{ overflow:auto; max-height:70vh; border:1px solid var(--border-soft); border-radius:12px; }}
+    .summary-card strong {{ font-size:1.05rem; }}
+    .history-table-wrap {{ overflow:auto; max-height:68vh; border:1px solid var(--border-soft); border-radius:12px; }}
     .history-table {{ width:100%; border-collapse:collapse; white-space:nowrap; font-size:.75rem; }}
     .history-table th,.history-table td {{ padding:8px 9px; border-bottom:1px solid var(--border-soft); text-align:right; }}
     .history-table th:first-child,.history-table td:first-child,.history-table th:nth-child(2),.history-table td:nth-child(2) {{ text-align:left; }}
@@ -1993,22 +2584,23 @@ def render_history_page(
     .downloads {{ display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }}
     .downloads a {{ font-size:.76rem; font-weight:700; }}
     .empty {{ text-align:center !important; color:var(--faint); padding:24px !important; }}
+    .section-gap {{ margin-top:16px; }}
     @media (max-width:1100px) {{ .summary-grid {{ grid-template-columns:repeat(3,1fr); }} }}
-    @media (max-width:700px) {{ .history-shell {{ padding:14px; }} .summary-grid {{ grid-template-columns:repeat(2,1fr); }} .view-switch {{ margin-left:0; }} }}
+    @media (max-width:700px) {{ .history-shell {{ padding:14px; }} .summary-grid {{ grid-template-columns:repeat(2,1fr); }} }}
   </style>
 </head>
 <body>
   <main class="history-shell">
     <div class="history-top">
       <div>
-        <div class="eyebrow">POINT-IN-TIME REPLAY</div>
+        <div class="eyebrow">POINT-IN-TIME REPLAY + FAST TIMING</div>
         <h1>Historical Dashboard Decisions</h1>
         <p>
-          This replays the current dashboard decision engine one historical date at a time.
-          A 5-day outcome is not exposed until its fifth trading session has completed;
-          a 20-day return is withheld until its twentieth session has completed; and
-          drawdown is recalculated only through the replay date. This prevents future
-          market outcomes from leaking into earlier decisions. WAIT ON BUYING is not a SELL signal.
+          The fast timing layer is intentionally earlier than the conservative analog model.
+          It scores fear/greed extremes, drawdown/extension, and same-day stabilization or
+          rollover evidence. The conservative decision still uses the point-in-time analog
+          replay. Future local lows/highs are used only in the diagnostic evaluation CSV and
+          never to generate a timing signal.
         </p>
       </div>
       <a class="back-link" href="index.html">← Back to dashboard</a>
@@ -2016,28 +2608,44 @@ def render_history_page(
 
     <section class="summary-grid">
       <div class="summary-card"><small>Coverage</small><strong>{html_lib.escape(first_date)}</strong><small>through {html_lib.escape(last_date)}</small></div>
-      <div class="summary-card"><small>BUY GRADUALLY days</small><strong>{buy_count}</strong></div>
-      <div class="summary-card"><small>WAIT ON BUYING days</small><strong>{wait_count}</strong></div>
-      <div class="summary-card"><small>HOLD days</small><strong>{hold_count}</strong></div>
-      <div class="summary-card"><small>Insufficient evidence</small><strong>{insufficient_count}</strong></div>
-      <div class="summary-card"><small>Action changes</small><strong>{len(changes)}</strong></div>
+      <div class="summary-card"><small>Early BUY days</small><strong>{early_buy_count}</strong></div>
+      <div class="summary-card"><small>Early TRIM days</small><strong>{early_trim_count}</strong></div>
+      <div class="summary-card"><small>Confirmed BUY days</small><strong>{buy_count}</strong></div>
+      <div class="summary-card"><small>WAIT days</small><strong>{wait_count}</strong></div>
+      <div class="summary-card"><small>Timing changes</small><strong>{len(timing_changes)}</strong></div>
     </section>
 
     <section class="panel">
       <div class="panel-heading">
-        <div><div class="eyebrow">DECISION LOG</div><h2 id="table-title">Every replayed date</h2></div>
-        <div class="hint">Filter to the exact dates the dashboard would have displayed each action.</div>
+        <div><div class="eyebrow">FAST TIMING CHANGES</div><h2>Earlier buy / trim dates</h2></div>
+        <div class="hint">This is the table to use when judging whether signals are still too late.</div>
       </div>
-
-      <div class="controls">
-        <button class="filter-btn active" data-filter="ALL">All</button>
-        <button class="filter-btn" data-filter="BUY GRADUALLY">BUY GRADUALLY</button>
-        <button class="filter-btn" data-filter="WAIT ON BUYING">WAIT ON BUYING</button>
-        <button class="filter-btn" data-filter="HOLD / NO EXTRA BUYING">HOLD</button>
-        <button class="filter-btn" data-filter="INSUFFICIENT EVIDENCE">INSUFFICIENT</button>
-        <button class="filter-btn view-switch" id="toggle-view">Show action changes only</button>
+      <div class="history-table-wrap">
+        <table class="history-table">
+          <thead><tr>
+            <th>Date</th><th>Fast timing action</th><th>F&amp;G</th><th>Recent low</th>
+            <th>Recent high</th><th>Score</th><th>Confirm</th><th>Regime</th>
+            <th>252D DD</th><th>Suggested action</th><th>Slow model</th>
+          </tr></thead>
+          <tbody>{_render_timing_rows(timing_changes)}</tbody>
+        </table>
       </div>
+      <div class="downloads">
+        <a href="timing_decision_changes.csv">Download fast timing changes CSV</a>
+        <a href="timing_evaluation.csv">Download turning-point evaluation CSV</a>
+        <a href="historical_decisions.csv">Download every date CSV</a>
+      </div>
+      <p class="method-note">
+        BUY evaluation: {html_lib.escape(timing_eval_summary(eval_buy))}.<br>
+        TRIM evaluation: {html_lib.escape(timing_eval_summary(eval_trim))}.
+      </p>
+    </section>
 
+    <section class="panel section-gap">
+      <div class="panel-heading">
+        <div><div class="eyebrow">CONSERVATIVE CONFIRMATION</div><h2>Original analog-model action changes</h2></div>
+        <div class="hint">Kept unchanged so you can compare how much earlier the fast layer reacts.</div>
+      </div>
       <div class="history-table-wrap">
         <table class="history-table">
           <thead><tr>
@@ -2045,49 +2653,19 @@ def render_history_page(
             <th>Regime</th><th>Extension</th><th>Analogs</th><th>Baseline N</th>
             <th>5D Excess</th><th>CI Low</th><th>CI High</th><th>20D DD</th><th>Sizing</th>
           </tr></thead>
-          <tbody id="all-rows">{_render_history_rows(history)}</tbody>
-          <tbody id="change-rows" style="display:none">{_render_history_rows(changes)}</tbody>
+          <tbody>{_render_history_rows(changes)}</tbody>
         </table>
       </div>
-
       <div class="downloads">
-        <a href="historical_decisions.csv">Download every decision CSV</a>
-        <a href="decision_changes.csv">Download action changes CSV</a>
-        <a href="historical_decisions.json">Download JSON</a>
+        <a href="decision_changes.csv">Download slow-model changes CSV</a>
+        <a href="historical_decisions.json">Download full JSON</a>
       </div>
       <p class="method-note">
         Generated {generated_at.strftime('%Y-%m-%d %H:%M UTC')} from {html_lib.escape(data_source)}.
-        Return columns in the downloadable data are decimals: 0.012 means 1.2%.
+        Return columns in downloadable data are decimals: 0.012 means 1.2%.
       </p>
     </section>
   </main>
-
-  <script>
-    let activeFilter = "ALL";
-    let changeMode = false;
-    function activeBody() {{ return document.getElementById(changeMode ? "change-rows" : "all-rows"); }}
-    function applyFilter() {{
-      for (const row of activeBody().querySelectorAll("tr[data-action]")) {{
-        row.style.display = activeFilter === "ALL" || row.dataset.action === activeFilter ? "" : "none";
-      }}
-    }}
-    document.querySelectorAll(".filter-btn[data-filter]").forEach((button) => {{
-      button.addEventListener("click", () => {{
-        document.querySelectorAll(".filter-btn[data-filter]").forEach((node) => node.classList.remove("active"));
-        button.classList.add("active");
-        activeFilter = button.dataset.filter;
-        applyFilter();
-      }});
-    }});
-    document.getElementById("toggle-view").addEventListener("click", (event) => {{
-      changeMode = !changeMode;
-      document.getElementById("all-rows").style.display = changeMode ? "none" : "";
-      document.getElementById("change-rows").style.display = changeMode ? "" : "none";
-      document.getElementById("table-title").textContent = changeMode ? "Action changes only" : "Every replayed date";
-      event.currentTarget.textContent = changeMode ? "Show every date" : "Show action changes only";
-      applyFilter();
-    }});
-  </script>
 </body>
 </html>
 """
@@ -2170,10 +2748,35 @@ PAGE_TEMPLATE = Template(
         {{ chart | safe }}
       </section>
 
+      <section class="panel timing-panel timing-{{ timing.tone }}">
+        <div class="panel-heading">
+          <div><p class="eyebrow">FAST TIMING LAYER</p><h2>{{ timing.action }}</h2></div>
+          <span class="hint">Designed to react earlier than the analog model. Uses only current/backward-looking data.</span>
+        </div>
+        <div class="timing-topline">
+          <span class="action-sizing-label">{{ timing.recommendation }}</span>
+        </div>
+        <p class="action-detail">{{ timing.rationale }}</p>
+        <div class="timing-stats">
+          <div><dt>Side</dt><dd>{{ timing.side }}</dd></div>
+          <div><dt>Stress / heat score</dt><dd>{{ timing.score }}</dd></div>
+          <div><dt>Confirmations</dt><dd>{{ timing.confirmation_count }}/{{ timing.confirmation_total }}</dd></div>
+          <div><dt>Recent F&amp;G range</dt><dd>{{ '%.1f'|format(timing.recent_fg_low_5) if timing.recent_fg_low_5 is not none else 'N/A' }} – {{ '%.1f'|format(timing.recent_fg_high_5) if timing.recent_fg_high_5 is not none else 'N/A' }}</dd></div>
+        </div>
+        <div class="timing-checks">
+          {% for check in timing.checks %}
+          <div class="timing-check timing-check-{{ 'pass' if check.passed else 'fail' }}">
+            <span>{{ '✓' if check.passed else '·' }}</span>
+            <div><strong>{{ check.label }}</strong><small>{{ check.value }}</small></div>
+          </div>
+          {% endfor %}
+        </div>
+      </section>
+
       <section class="panel action-panel action-{{ verdict.tone }}">
         <div class="panel-heading">
-          <div><p class="eyebrow">WHAT TO DO WITH THIS</p><h2>{{ guidance.tier }}</h2></div>
-          <span class="hint">Rule-based sizing derived from the checks on the left. Not personalized financial advice.</span>
+          <div><p class="eyebrow">SLOW CONFIRMATION LAYER</p><h2>{{ guidance.tier }}</h2></div>
+          <span class="hint">The original analog/bootstrap model remains unchanged and acts as confirmation.</span>
         </div>
         <div class="action-sizing"><span class="action-sizing-label">{{ guidance.sizing_label }}</span></div>
         <p class="action-detail">{{ guidance.sizing_detail }}</p>
@@ -2186,19 +2789,20 @@ PAGE_TEMPLATE = Template(
           <a href="decision_history.html">Open full history →</a>
         </div>
         <p class="history-description">
-          See the exact historical dates this same decision engine would have shown each action,
-          using only information knowable on that date. {{ history_summary.total }} dates replayed;
-          {{ history_summary.changes }} headline action changes.
+          Compare the new fast timing layer against the original confirmation model using only
+          information knowable on each replay date. {{ history_summary.total }} dates replayed;
+          {{ history_summary.timing_changes }} fast timing changes.
         </p>
         <div class="history-mini-stats">
-          <div><dt>BUY days</dt><dd>{{ history_summary.buy }}</dd></div>
-          <div><dt>WAIT days</dt><dd>{{ history_summary.wait }}</dd></div>
-          <div><dt>HOLD days</dt><dd>{{ history_summary.hold }}</dd></div>
-          <div><dt>Action changes</dt><dd>{{ history_summary.changes }}</dd></div>
+          <div><dt>Early BUY days</dt><dd>{{ history_summary.early_buy }}</dd></div>
+          <div><dt>Early TRIM days</dt><dd>{{ history_summary.early_trim }}</dd></div>
+          <div><dt>Confirmed BUY days</dt><dd>{{ history_summary.buy }}</dd></div>
+          <div><dt>Fast changes</dt><dd>{{ history_summary.timing_changes }}</dd></div>
         </div>
         <div class="history-downloads">
+          <a href="timing_decision_changes.csv" download>Fast timing changes CSV</a>
+          <a href="timing_evaluation.csv" download>Timing evaluation CSV</a>
           <a href="historical_decisions.csv" download>Every date CSV</a>
-          <a href="decision_changes.csv" download>Changes only CSV</a>
         </div>
       </section>
 
@@ -2242,11 +2846,11 @@ PAGE_TEMPLATE = Template(
       <section class="panel note-panel">
         <p class="eyebrow">HOW TO READ THIS</p>
         <p>
-          BUY GRADUALLY requires a positive excess return over the same-regime baseline,
-          a bootstrap confidence interval above zero, and supporting return/drawdown evidence.
-          HOLD / NO EXTRA BUYING means the model does not support an above-normal tactical purchase.
-          WAIT ON BUYING is not a sell signal. The historical replay uses the same rules but withholds
-          future outcomes until they would have been knowable on each replay date.
+          The FAST TIMING layer can issue an EARLY BUY or EARLY TRIM before the slower analog
+          model has enough completed historical evidence. BUY GRADUALLY still requires positive
+          same-regime excess return and bootstrap confirmation. The two layers are intentionally
+          separate: the fast layer improves timing; the slow layer improves confidence. Future local
+          lows/highs are used only to evaluate timing after the fact, never to create a signal.
         </p>
       </section>
     </main>
@@ -2335,6 +2939,23 @@ a { color: var(--accent); }
 .action-sizing-label { display: inline-block; font-size: 1.1rem; font-weight: 800; padding: 7px 16px; border-radius: 999px; background: rgba(90,169,255,.14); color: var(--accent); }
 .action-detail { font-size: .85rem; color: var(--muted); line-height: 1.5; margin-bottom: 8px; }
 .action-guardrail { font-size: .76rem; color: var(--faint); font-style: italic; }
+.timing-panel { border-width:1px; }
+.timing-positive { border-color:rgba(47,168,96,.5); background:linear-gradient(180deg,rgba(47,168,96,.12),var(--panel) 72%); }
+.timing-negative { border-color:rgba(209,80,63,.5); background:linear-gradient(180deg,rgba(209,80,63,.12),var(--panel) 72%); }
+.timing-mixed { border-color:rgba(210,167,45,.48); background:linear-gradient(180deg,rgba(210,167,45,.10),var(--panel) 72%); }
+.timing-neutral { border-color:var(--border); }
+.timing-topline { margin:4px 0 10px; }
+.timing-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin:12px 0; }
+.timing-stats div { background:rgba(0,0,0,.18); border-radius:9px; padding:9px 10px; }
+.timing-stats dt { color:var(--muted); font-size:.68rem; }
+.timing-stats dd { font-weight:800; margin-top:2px; font-size:.82rem; }
+.timing-checks { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin-top:10px; }
+.timing-check { display:grid; grid-template-columns:18px 1fr; gap:7px; align-items:start; background:rgba(0,0,0,.14); border-radius:8px; padding:7px 9px; }
+.timing-check > span { font-weight:900; }
+.timing-check-pass > span { color:var(--positive); }
+.timing-check-fail > span { color:var(--faint); }
+.timing-check strong { display:block; font-size:.72rem; }
+.timing-check small { display:block; color:var(--faint); font-size:.65rem; margin-top:2px; }
 .history-description { color: var(--muted); font-size:.84rem; line-height:1.5; }
 .history-mini-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin:12px 0; }
 .history-mini-stats div { background:rgba(0,0,0,.18); border-radius:9px; padding:9px 10px; }
@@ -2378,6 +2999,8 @@ details .table-wrap { margin-top: 8px; }
   .hint { text-align: left; max-width: none; }
   .outcomes-stats { grid-template-columns: 1fr 1fr; }
   .history-mini-stats { grid-template-columns:1fr 1fr; }
+  .timing-stats { grid-template-columns:1fr 1fr; }
+  .timing-checks { grid-template-columns:1fr; }
 }
 """
 
@@ -2435,6 +3058,7 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
         settings,
     )
     guidance = build_position_guidance(verdict, settings)
+    timing = score_fast_timing(daily, market, current, settings)
     study = build_event_study(events, settings)
     scorecard_rows = build_signal_scorecard(study, current)
     scorecard = format_scorecard(scorecard_rows)
@@ -2451,9 +3075,13 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
         progress_every=100,
     )
     changes = decision_change_rows(history)
+    timing_changes = timing_change_rows(history)
+    timing_evaluation = evaluate_timing_signals(timing_changes, market)
 
     history.to_csv(site_dir / "historical_decisions.csv", index=False)
     changes.to_csv(site_dir / "decision_changes.csv", index=False)
+    timing_changes.to_csv(site_dir / "timing_decision_changes.csv", index=False)
+    timing_evaluation.to_csv(site_dir / "timing_evaluation.csv", index=False)
     history_payload = {
         "generated_at": generated.isoformat(),
         "data_source": source_label,
@@ -2462,10 +3090,14 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
             "5-day returns are exposed only after the fifth trading session is known.",
             "20-day returns are exposed only after the twentieth trading session is known.",
             "20-day drawdown is recomputed through each replay cutoff.",
-            "WAIT ON BUYING is not a SELL action; the current dashboard has no automatic SELL action.",
+            "WAIT ON BUYING remains the slow model's non-sell action.",
+            "The fast timing layer can issue EARLY TRIM / CAUTION for tactical risk reduction.",
+            "Future local lows/highs are used only by timing_evaluation.csv and never by signal generation.",
         ],
         "decisions": _history_records(history),
         "action_changes": _history_records(changes),
+        "timing_changes": _history_records(timing_changes),
+        "timing_evaluation": _history_records(timing_evaluation),
     }
     (site_dir / "historical_decisions.json").write_text(
         json.dumps(history_payload, indent=2, allow_nan=False),
@@ -2475,6 +3107,8 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
         render_history_page(
             history,
             changes,
+            timing_changes,
+            timing_evaluation,
             generated_at=generated,
             data_source=source_label,
         ),
@@ -2482,13 +3116,33 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
     )
 
     history_counts = history["action"].value_counts().to_dict() if not history.empty else {}
+    timing_counts = (
+        history["timing_action"].value_counts().to_dict()
+        if not history.empty
+        else {}
+    )
     history_summary = {
         "total": int(len(history)),
         "changes": int(len(changes)),
+        "timing_changes": int(len(timing_changes)),
         "buy": int(history_counts.get("BUY GRADUALLY", 0)),
         "wait": int(history_counts.get("WAIT ON BUYING", 0)),
         "hold": int(history_counts.get("HOLD / NO EXTRA BUYING", 0)),
         "insufficient": int(history_counts.get("INSUFFICIENT EVIDENCE", 0)),
+        "early_buy": int(
+            sum(
+                count
+                for action, count in timing_counts.items()
+                if str(action).startswith("EARLY BUY")
+            )
+        ),
+        "early_trim": int(
+            sum(
+                count
+                for action, count in timing_counts.items()
+                if str(action).startswith("EARLY TRIM")
+            )
+        ),
     }
 
     gaps = daily.index.to_series().diff().dt.days.dropna()
@@ -2645,10 +3299,11 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
         generated=generated.strftime("%Y-%m-%d %H:%M UTC"),
         verdict=verdict,
         guidance=guidance,
+        timing=timing,
         regime_label=pretty_regime(verdict.market_regime),
         warnings=warnings,
         metrics=metrics,
-        chart=render_chart(daily, market),
+        chart=render_chart(daily, market, timing_changes),
         gauge=render_gauge(float(current["fear_greed"])),
         outcomes_chart=render_analog_outcomes_chart(analogs, regime_baseline),
         outcomes_stats=outcomes_stats,
@@ -2704,6 +3359,7 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
         },
         "verdict": asdict(verdict),
         "position_guidance": asdict(guidance),
+        "fast_timing": asdict(timing),
         "historical_decisions": history_summary,
         "warnings": warnings,
     }
@@ -2731,8 +3387,12 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
         f"Action      : {verdict.action} "
         f"({verdict.confidence} confidence, n={verdict.sample_size})"
     )
+    print(f"Timing      : {timing.action} — {timing.recommendation}")
     print(f"Sizing      : {guidance.tier} — {guidance.sizing_label}")
-    print(f"History     : {len(history)} decisions, {len(changes)} action changes")
+    print(
+        f"History     : {len(history)} decisions, {len(timing_changes)} fast timing changes, "
+        f"{len(changes)} slow-model changes"
+    )
     print(f"Site        : {site_dir / 'index.html'}")
 
 
