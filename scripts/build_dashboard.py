@@ -10,6 +10,11 @@ current Fear & Greed setup AND the current S&P 500 price/risk regime. The
 signal is compared with a same-regime baseline rather than the unconditional
 market average.
 
+This version also performs a point-in-time replay of the SAME decision engine
+for every historical Fear & Greed observation. Future outcomes are withheld
+until they would have been knowable on each replay date, so historical action
+dates do not use future data.
+
 Public functions imported by test_dashboard.py are intentionally preserved:
     parse_fear_dataset
     parse_market_dataset
@@ -31,11 +36,16 @@ Generated output, under site/ by default:
     full_analysis.csv
     analysis.json
     version.json
+    historical_decisions.csv
+    decision_changes.csv
+    historical_decisions.json
+    decision_history.html
 """
 
 from __future__ import annotations
 
 import argparse
+import html as html_lib
 import io
 import json
 import math
@@ -44,7 +54,7 @@ import sys
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 
 import numpy as np
 import pandas as pd
@@ -70,6 +80,35 @@ MARKET_CONTEXT_COLUMNS = [
     "distance_from_sma_200",
     "volatility_20d",
     "market_regime",
+]
+
+HISTORY_OUTPUT_COLUMNS = [
+    "decision_date",
+    "market_date",
+    "fear_greed",
+    "fg_change_5",
+    "market_regime",
+    "market_extension",
+    "action",
+    "confidence",
+    "sizing_tier",
+    "sizing_label",
+    "analog_sample",
+    "regime_baseline_sample",
+    "required_sample",
+    "win_rate_5d",
+    "average_5d",
+    "median_5d",
+    "average_20d",
+    "regime_baseline_5d",
+    "excess_5d",
+    "excess_ci_low_5d",
+    "excess_ci_high_5d",
+    "average_drawdown_20d",
+    "positive_checks_passed",
+    "positive_checks_total",
+    "analog_method",
+    "rationale",
 ]
 
 
@@ -116,9 +155,6 @@ class Settings:
     normal_maximum_average_drawdown_20d: float = -0.04
     high_extension_maximum_average_drawdown_20d: float = -0.03
 
-    # Position-sizing tiers shown in the "What to do with this" panel.
-    # These are illustrative defaults, not personalized financial advice —
-    # tune them to whatever your own contribution plan looks like.
     sizing_strong_buy_pct: int = 150
     sizing_modest_buy_low_pct: int = 110
     sizing_modest_buy_high_pct: int = 125
@@ -491,7 +527,9 @@ def add_features(
     market["distance_from_record_high"] = close / record_high - 1
     market["distance_from_sma_50"] = close / sma_50 - 1
     market["distance_from_sma_200"] = close / sma_200 - 1
-    market["volatility_20d"] = daily_return.rolling(20, min_periods=10).std(ddof=1) * math.sqrt(252)
+    market["volatility_20d"] = (
+        daily_return.rolling(20, min_periods=10).std(ddof=1) * math.sqrt(252)
+    )
 
     market["market_regime"] = market.apply(classify_market_regime, axis=1)
     return daily, market
@@ -538,8 +576,6 @@ def merge_signals(
         signal_position = position_of[market_date]
         entry_position = signal_position + 1
 
-        # Historical outcomes require a next-session entry. The latest live
-        # observation is handled separately by build_current_context().
         if entry_position >= len(market):
             continue
 
@@ -699,13 +735,18 @@ def bootstrap_excess_interval(
     if len(analog) < 2 or len(baseline) < 2 or iterations <= 0:
         return None, None
 
+    # Draw the full bootstrap matrices in NumPy rather than looping in Python.
+    # This is the same bootstrap estimator (same seed, iterations and resampling
+    # with replacement), but is fast enough to replay the complete history on
+    # every dashboard build.
     generator = np.random.default_rng(seed)
-    differences = np.empty(iterations, dtype=float)
-
-    for index in range(iterations):
-        analog_sample = generator.choice(analog, size=len(analog), replace=True)
-        baseline_sample = generator.choice(baseline, size=len(baseline), replace=True)
-        differences[index] = analog_sample.mean() - baseline_sample.mean()
+    analog_samples = generator.choice(
+        analog, size=(iterations, len(analog)), replace=True
+    )
+    baseline_samples = generator.choice(
+        baseline, size=(iterations, len(baseline)), replace=True
+    )
+    differences = analog_samples.mean(axis=1) - baseline_samples.mean(axis=1)
 
     alpha = 1 - confidence
     lower = float(np.quantile(differences, alpha / 2))
@@ -1143,7 +1184,7 @@ def score_analogs(
 
 
 # =============================================================================
-# Position-sizing guidance ("what do I actually do with this")
+# Position-sizing guidance
 # =============================================================================
 
 @dataclass
@@ -1155,14 +1196,7 @@ class PositionGuidance:
 
 
 def build_position_guidance(verdict: Verdict, settings: Settings) -> PositionGuidance:
-    """
-    Translate the verdict into a concrete, rule-based sizing suggestion.
-
-    This does not invent new evidence — it only restates the same checks
-    already computed in score_analogs() as a tiered action. It is a research
-    heuristic you can tune (see the sizing_* fields in Settings), not
-    personalized financial advice.
-    """
+    """Translate the verdict into the dashboard's rule-based sizing suggestion."""
     checks_ratio = (
         verdict.positive_checks_passed / verdict.positive_checks_total
         if verdict.positive_checks_total
@@ -1289,12 +1323,6 @@ def build_event_study(events: pd.DataFrame, settings: Settings) -> pd.DataFrame:
 
 
 def build_signal_scorecard(study: pd.DataFrame, current: pd.Series) -> pd.DataFrame:
-    """
-    Narrow the full event study down to the handful of backtested signals
-    that are actually "live" given today's Fear & Greed level and recent
-    move, so the right-hand panel shows what's relevant today instead of
-    every threshold ever tested.
-    """
     if study.empty:
         return study.iloc[0:0]
 
@@ -1338,7 +1366,6 @@ def build_signal_scorecard(study: pd.DataFrame, current: pd.Series) -> pd.DataFr
 
 
 def format_scorecard(rows: pd.DataFrame, edge_threshold: float = 0.003) -> list[dict[str, Any]]:
-    """Turn scorecard rows into small, template-friendly cards with a tone."""
     items: list[dict[str, Any]] = []
     for _, row in rows.iterrows():
         excess = row.get("Excess vs baseline 5D")
@@ -1360,6 +1387,244 @@ def format_scorecard(rows: pd.DataFrame, edge_threshold: float = 0.003) -> list[
             }
         )
     return items
+
+
+# =============================================================================
+# Point-in-time historical replay
+# =============================================================================
+
+def _as_timestamp(value: Any) -> pd.Timestamp:
+    timestamp = pd.Timestamp(value)
+    if timestamp.tzinfo is not None:
+        timestamp = timestamp.tz_localize(None)
+    return timestamp.normalize()
+
+
+def _plain_history_value(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, (np.integer, int)):
+        return int(value)
+    if isinstance(value, (np.floating, float)):
+        numeric = float(value)
+        return numeric if math.isfinite(numeric) else None
+    if pd.isna(value):
+        return None
+    return value
+
+
+def attach_outcome_known_dates(
+    events: pd.DataFrame,
+    market: pd.DataFrame,
+    horizons: Iterable[int] = (5, 20),
+) -> pd.DataFrame:
+    """Attach the market close date when each forward return becomes knowable."""
+    output = events.copy()
+    market_index = pd.DatetimeIndex(market.index)
+    if market_index.tz is not None:
+        market_index = market_index.tz_localize(None)
+    market_index = market_index.normalize()
+    position_of = {timestamp: position for position, timestamp in enumerate(market_index)}
+
+    entry_positions: list[float] = []
+    for value in output["entry_date"]:
+        position = position_of.get(_as_timestamp(value))
+        entry_positions.append(float(position) if position is not None else np.nan)
+    output["_entry_position"] = entry_positions
+
+    for horizon in horizons:
+        known_dates: list[pd.Timestamp | pd.NaT] = []
+        for raw_position in output["_entry_position"]:
+            if pd.isna(raw_position):
+                known_dates.append(pd.NaT)
+                continue
+            target_position = int(raw_position) + int(horizon) - 1
+            if 0 <= target_position < len(market_index):
+                known_dates.append(market_index[target_position])
+            else:
+                known_dates.append(pd.NaT)
+        output[f"_forward_{horizon}d_known_date"] = known_dates
+
+    return output
+
+
+def eligible_events_asof(
+    events: pd.DataFrame,
+    cutoff_market_date: pd.Timestamp,
+) -> pd.DataFrame:
+    """Expose only events whose 5-day outcome was known by the replay cutoff."""
+    cutoff = _as_timestamp(cutoff_market_date)
+    known = pd.to_datetime(events["_forward_5d_known_date"], errors="coerce")
+    return events.loc[known.notna() & known.le(cutoff)].copy()
+
+
+def mask_analog_outcomes_asof(
+    analogs: pd.DataFrame,
+    market: pd.DataFrame,
+    cutoff_market_date: pd.Timestamp,
+) -> pd.DataFrame:
+    """Hide future 20D return data and recompute drawdown only through cutoff."""
+    if analogs.empty:
+        return analogs.copy()
+
+    output = analogs.copy()
+    cutoff = _as_timestamp(cutoff_market_date)
+    market_index = pd.DatetimeIndex(market.index)
+    if market_index.tz is not None:
+        market_index = market_index.tz_localize(None)
+    market_index = market_index.normalize()
+    cutoff_position = int(market_index.searchsorted(cutoff, side="right") - 1)
+
+    if "forward_20d" in output.columns and "_forward_20d_known_date" in output.columns:
+        known_20 = pd.to_datetime(output["_forward_20d_known_date"], errors="coerce")
+        output.loc[known_20.isna() | known_20.gt(cutoff), "forward_20d"] = np.nan
+
+    lows_source = market["low"] if "low" in market.columns else market["close"]
+    lows = pd.to_numeric(lows_source, errors="coerce").to_numpy(dtype=float)
+
+    drawdowns: list[float] = []
+    for _, row in output.iterrows():
+        raw_entry_position = row.get("_entry_position")
+        entry_price = pd.to_numeric(
+            pd.Series([row.get("entry_price")]), errors="coerce"
+        ).iloc[0]
+
+        if pd.isna(raw_entry_position) or pd.isna(entry_price) or float(entry_price) <= 0:
+            drawdowns.append(np.nan)
+            continue
+
+        entry_position = int(raw_entry_position)
+        end_position = min(entry_position + 19, cutoff_position, len(lows) - 1)
+        if end_position < entry_position:
+            drawdowns.append(np.nan)
+            continue
+
+        window = lows[entry_position : end_position + 1]
+        window = window[np.isfinite(window)]
+        if window.size == 0:
+            drawdowns.append(np.nan)
+            continue
+
+        drawdowns.append(float(window.min() / float(entry_price) - 1.0))
+
+    output["max_drawdown_20d"] = drawdowns
+    return output
+
+
+def replay_historical_decisions(
+    settings: Settings,
+    daily: pd.DataFrame,
+    market: pd.DataFrame,
+    events: pd.DataFrame,
+    *,
+    progress_every: int = 100,
+) -> pd.DataFrame:
+    """Replay this exact dashboard engine one historical observation at a time."""
+    prepared_events = attach_outcome_known_dates(events, market, horizons=(5, 20))
+    replay_dates = pd.DatetimeIndex(daily.index)
+    if replay_dates.tz is not None:
+        replay_dates = replay_dates.tz_localize(None)
+    replay_dates = replay_dates.normalize()
+
+    rows: list[dict[str, Any]] = []
+    total = len(replay_dates)
+
+    for ordinal, decision_date in enumerate(replay_dates, start=1):
+        daily_asof = daily.loc[daily.index <= decision_date]
+        market_asof = market.loc[market.index <= decision_date]
+        if daily_asof.empty or market_asof.empty:
+            continue
+
+        current = build_current_context(daily_asof, market_asof)
+        cutoff_market_date = _as_timestamp(current["market_date"])
+
+        eligible = eligible_events_asof(prepared_events, cutoff_market_date)
+        historical_analogs, method = find_analogs(eligible, current, settings)
+        historical_baseline = find_regime_baseline(eligible, current, settings)
+        historical_analogs = mask_analog_outcomes_asof(
+            historical_analogs,
+            market,
+            cutoff_market_date,
+        )
+
+        historical_verdict = score_analogs(
+            historical_analogs,
+            historical_baseline,
+            current,
+            method,
+            settings,
+        )
+        historical_guidance = build_position_guidance(historical_verdict, settings)
+
+        rows.append(
+            {
+                "decision_date": decision_date.date().isoformat(),
+                "market_date": cutoff_market_date.date().isoformat(),
+                "fear_greed": _plain_history_value(current.get("fear_greed")),
+                "fg_change_5": _plain_history_value(current.get("fg_change_5")),
+                "market_regime": historical_verdict.market_regime,
+                "market_extension": historical_verdict.market_extension,
+                "action": historical_verdict.action,
+                "confidence": historical_verdict.confidence,
+                "sizing_tier": historical_guidance.tier,
+                "sizing_label": historical_guidance.sizing_label,
+                "analog_sample": historical_verdict.sample_size,
+                "regime_baseline_sample": historical_verdict.regime_baseline_sample,
+                "required_sample": historical_verdict.required_sample,
+                "win_rate_5d": _plain_history_value(historical_verdict.win_rate_5d),
+                "average_5d": _plain_history_value(historical_verdict.average_5d),
+                "median_5d": _plain_history_value(historical_verdict.median_5d),
+                "average_20d": _plain_history_value(historical_verdict.average_20d),
+                "regime_baseline_5d": _plain_history_value(
+                    historical_verdict.regime_baseline_5d
+                ),
+                "excess_5d": _plain_history_value(historical_verdict.excess_5d),
+                "excess_ci_low_5d": _plain_history_value(
+                    historical_verdict.excess_ci_low_5d
+                ),
+                "excess_ci_high_5d": _plain_history_value(
+                    historical_verdict.excess_ci_high_5d
+                ),
+                "average_drawdown_20d": _plain_history_value(
+                    historical_verdict.average_drawdown_20d
+                ),
+                "positive_checks_passed": historical_verdict.positive_checks_passed,
+                "positive_checks_total": historical_verdict.positive_checks_total,
+                "analog_method": historical_verdict.analog_method,
+                "rationale": historical_verdict.rationale,
+            }
+        )
+
+        if progress_every > 0 and (ordinal % progress_every == 0 or ordinal == total):
+            print(f"[history] replayed {ordinal}/{total} decision dates")
+
+    return pd.DataFrame(rows, columns=HISTORY_OUTPUT_COLUMNS)
+
+
+def decision_change_rows(history: pd.DataFrame) -> pd.DataFrame:
+    """Return the first decision and every later date when headline action changed."""
+    if history.empty:
+        return history.copy()
+    changed = history["action"].ne(history["action"].shift(1))
+    return history.loc[changed].reset_index(drop=True)
+
+
+def _history_records(frame: pd.DataFrame) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for raw in frame.to_dict(orient="records"):
+        clean: dict[str, Any] = {}
+        for key, value in raw.items():
+            if isinstance(value, (np.integer, int)):
+                clean[key] = int(value)
+            elif isinstance(value, (np.floating, float)):
+                numeric = float(value)
+                clean[key] = numeric if math.isfinite(numeric) else None
+            elif value is None or pd.isna(value):
+                clean[key] = None
+            else:
+                clean[key] = value
+        records.append(clean)
+    return records
 
 
 # =============================================================================
@@ -1531,11 +1796,6 @@ def render_analog_outcomes_chart(
     analogs: pd.DataFrame,
     regime_baseline: pd.DataFrame,
 ) -> str:
-    """
-    Show how the current analogs actually played out over the next 5
-    sessions, next to the same-regime baseline, as a strip/box plot instead
-    of a raw table of numbers.
-    """
     analog_returns = (
         pd.to_numeric(analogs.get("forward_5d"), errors="coerce").dropna() * 100
     )
@@ -1629,6 +1889,210 @@ def render_table(
     )
 
 
+def _history_pct(value: Any, digits: int = 2) -> str:
+    if value is None or pd.isna(value):
+        return "—"
+    return f"{float(value) * 100:.{digits}f}%"
+
+
+def _history_num(value: Any, digits: int = 1) -> str:
+    if value is None or pd.isna(value):
+        return "—"
+    return f"{float(value):.{digits}f}"
+
+
+def _history_action_class(action: str) -> str:
+    if action == "BUY GRADUALLY":
+        return "buy"
+    if action == "WAIT ON BUYING":
+        return "wait"
+    if action == "HOLD / NO EXTRA BUYING":
+        return "hold"
+    return "insufficient"
+
+
+def _render_history_rows(frame: pd.DataFrame) -> str:
+    if frame.empty:
+        return '<tr><td colspan="13" class="empty">No decisions in this view.</td></tr>'
+
+    rendered: list[str] = []
+    for _, row in frame.iterrows():
+        action = str(row["action"])
+        rendered.append(
+            "<tr "
+            f'data-action="{html_lib.escape(action, quote=True)}" '
+            f'data-date="{html_lib.escape(str(row["decision_date"]), quote=True)}">'
+            f'<td>{html_lib.escape(str(row["decision_date"]))}</td>'
+            f'<td><span class="action action-{_history_action_class(action)}">{html_lib.escape(action)}</span></td>'
+            f'<td>{html_lib.escape(str(row["confidence"]))}</td>'
+            f'<td>{_history_num(row["fear_greed"], 1)}</td>'
+            f'<td>{html_lib.escape(str(row["market_regime"]))}</td>'
+            f'<td>{html_lib.escape(str(row["market_extension"]))}</td>'
+            f'<td>{int(row["analog_sample"])}</td>'
+            f'<td>{int(row["regime_baseline_sample"])}</td>'
+            f'<td>{_history_pct(row["excess_5d"])}</td>'
+            f'<td>{_history_pct(row["excess_ci_low_5d"])}</td>'
+            f'<td>{_history_pct(row["excess_ci_high_5d"])}</td>'
+            f'<td>{_history_pct(row["average_drawdown_20d"])}</td>'
+            f'<td>{html_lib.escape(str(row["sizing_label"]))}</td>'
+            "</tr>"
+        )
+    return "\n".join(rendered)
+
+
+def render_history_page(
+    history: pd.DataFrame,
+    changes: pd.DataFrame,
+    *,
+    generated_at: datetime,
+    data_source: str,
+) -> str:
+    counts = history["action"].value_counts().to_dict() if not history.empty else {}
+    buy_count = int(counts.get("BUY GRADUALLY", 0))
+    wait_count = int(counts.get("WAIT ON BUYING", 0))
+    hold_count = int(counts.get("HOLD / NO EXTRA BUYING", 0))
+    insufficient_count = int(counts.get("INSUFFICIENT EVIDENCE", 0))
+    first_date = str(history.iloc[0]["decision_date"]) if not history.empty else "—"
+    last_date = str(history.iloc[-1]["decision_date"]) if not history.empty else "—"
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Fear &amp; Greed Decision History</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body {{ min-height:100vh; }}
+    .history-shell {{ max-width:1500px; margin:0 auto; padding:24px; }}
+    .history-top {{ display:flex; justify-content:space-between; gap:18px; align-items:flex-start; flex-wrap:wrap; margin-bottom:16px; }}
+    .history-top h1 {{ font-size:1.5rem; margin:3px 0 6px; }}
+    .history-top p {{ color:var(--muted); max-width:950px; line-height:1.5; font-size:.86rem; }}
+    .back-link {{ text-decoration:none; border:1px solid var(--border); border-radius:9px; padding:8px 12px; font-weight:700; }}
+    .summary-grid {{ display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; margin-bottom:16px; }}
+    .summary-card {{ background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; }}
+    .summary-card small {{ display:block; color:var(--muted); font-size:.68rem; margin-bottom:4px; }}
+    .summary-card strong {{ font-size:1.1rem; }}
+    .controls {{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }}
+    .filter-btn {{ border:1px solid var(--border); background:var(--panel-2); color:var(--text); border-radius:999px; padding:7px 11px; cursor:pointer; font-weight:700; font-size:.75rem; }}
+    .filter-btn.active {{ border-color:var(--accent); color:var(--accent); }}
+    .view-switch {{ margin-left:auto; }}
+    .history-table-wrap {{ overflow:auto; max-height:70vh; border:1px solid var(--border-soft); border-radius:12px; }}
+    .history-table {{ width:100%; border-collapse:collapse; white-space:nowrap; font-size:.75rem; }}
+    .history-table th,.history-table td {{ padding:8px 9px; border-bottom:1px solid var(--border-soft); text-align:right; }}
+    .history-table th:first-child,.history-table td:first-child,.history-table th:nth-child(2),.history-table td:nth-child(2) {{ text-align:left; }}
+    .history-table thead th {{ position:sticky; top:0; z-index:2; background:var(--panel-2); color:var(--muted); }}
+    .history-table tbody tr:hover {{ background:rgba(90,169,255,.06); }}
+    .action {{ display:inline-block; padding:3px 7px; border-radius:999px; font-size:.68rem; font-weight:800; }}
+    .action-buy {{ color:#67d391; background:rgba(47,168,96,.16); }}
+    .action-wait {{ color:#ee796b; background:rgba(209,80,63,.16); }}
+    .action-hold {{ color:#e3c55a; background:rgba(210,167,45,.16); }}
+    .action-insufficient {{ color:#a7b0bd; background:rgba(148,163,184,.10); }}
+    .method-note {{ color:var(--faint); font-size:.75rem; line-height:1.5; margin-top:12px; }}
+    .downloads {{ display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }}
+    .downloads a {{ font-size:.76rem; font-weight:700; }}
+    .empty {{ text-align:center !important; color:var(--faint); padding:24px !important; }}
+    @media (max-width:1100px) {{ .summary-grid {{ grid-template-columns:repeat(3,1fr); }} }}
+    @media (max-width:700px) {{ .history-shell {{ padding:14px; }} .summary-grid {{ grid-template-columns:repeat(2,1fr); }} .view-switch {{ margin-left:0; }} }}
+  </style>
+</head>
+<body>
+  <main class="history-shell">
+    <div class="history-top">
+      <div>
+        <div class="eyebrow">POINT-IN-TIME REPLAY</div>
+        <h1>Historical Dashboard Decisions</h1>
+        <p>
+          This replays the current dashboard decision engine one historical date at a time.
+          A 5-day outcome is not exposed until its fifth trading session has completed;
+          a 20-day return is withheld until its twentieth session has completed; and
+          drawdown is recalculated only through the replay date. This prevents future
+          market outcomes from leaking into earlier decisions. WAIT ON BUYING is not a SELL signal.
+        </p>
+      </div>
+      <a class="back-link" href="index.html">← Back to dashboard</a>
+    </div>
+
+    <section class="summary-grid">
+      <div class="summary-card"><small>Coverage</small><strong>{html_lib.escape(first_date)}</strong><small>through {html_lib.escape(last_date)}</small></div>
+      <div class="summary-card"><small>BUY GRADUALLY days</small><strong>{buy_count}</strong></div>
+      <div class="summary-card"><small>WAIT ON BUYING days</small><strong>{wait_count}</strong></div>
+      <div class="summary-card"><small>HOLD days</small><strong>{hold_count}</strong></div>
+      <div class="summary-card"><small>Insufficient evidence</small><strong>{insufficient_count}</strong></div>
+      <div class="summary-card"><small>Action changes</small><strong>{len(changes)}</strong></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div><div class="eyebrow">DECISION LOG</div><h2 id="table-title">Every replayed date</h2></div>
+        <div class="hint">Filter to the exact dates the dashboard would have displayed each action.</div>
+      </div>
+
+      <div class="controls">
+        <button class="filter-btn active" data-filter="ALL">All</button>
+        <button class="filter-btn" data-filter="BUY GRADUALLY">BUY GRADUALLY</button>
+        <button class="filter-btn" data-filter="WAIT ON BUYING">WAIT ON BUYING</button>
+        <button class="filter-btn" data-filter="HOLD / NO EXTRA BUYING">HOLD</button>
+        <button class="filter-btn" data-filter="INSUFFICIENT EVIDENCE">INSUFFICIENT</button>
+        <button class="filter-btn view-switch" id="toggle-view">Show action changes only</button>
+      </div>
+
+      <div class="history-table-wrap">
+        <table class="history-table">
+          <thead><tr>
+            <th>Date</th><th>Action</th><th>Confidence</th><th>F&amp;G</th>
+            <th>Regime</th><th>Extension</th><th>Analogs</th><th>Baseline N</th>
+            <th>5D Excess</th><th>CI Low</th><th>CI High</th><th>20D DD</th><th>Sizing</th>
+          </tr></thead>
+          <tbody id="all-rows">{_render_history_rows(history)}</tbody>
+          <tbody id="change-rows" style="display:none">{_render_history_rows(changes)}</tbody>
+        </table>
+      </div>
+
+      <div class="downloads">
+        <a href="historical_decisions.csv">Download every decision CSV</a>
+        <a href="decision_changes.csv">Download action changes CSV</a>
+        <a href="historical_decisions.json">Download JSON</a>
+      </div>
+      <p class="method-note">
+        Generated {generated_at.strftime('%Y-%m-%d %H:%M UTC')} from {html_lib.escape(data_source)}.
+        Return columns in the downloadable data are decimals: 0.012 means 1.2%.
+      </p>
+    </section>
+  </main>
+
+  <script>
+    let activeFilter = "ALL";
+    let changeMode = false;
+    function activeBody() {{ return document.getElementById(changeMode ? "change-rows" : "all-rows"); }}
+    function applyFilter() {{
+      for (const row of activeBody().querySelectorAll("tr[data-action]")) {{
+        row.style.display = activeFilter === "ALL" || row.dataset.action === activeFilter ? "" : "none";
+      }}
+    }}
+    document.querySelectorAll(".filter-btn[data-filter]").forEach((button) => {{
+      button.addEventListener("click", () => {{
+        document.querySelectorAll(".filter-btn[data-filter]").forEach((node) => node.classList.remove("active"));
+        button.classList.add("active");
+        activeFilter = button.dataset.filter;
+        applyFilter();
+      }});
+    }});
+    document.getElementById("toggle-view").addEventListener("click", (event) => {{
+      changeMode = !changeMode;
+      document.getElementById("all-rows").style.display = changeMode ? "none" : "";
+      document.getElementById("change-rows").style.display = changeMode ? "" : "none";
+      document.getElementById("table-title").textContent = changeMode ? "Action changes only" : "Every replayed date";
+      event.currentTarget.textContent = changeMode ? "Show every date" : "Show action changes only";
+      applyFilter();
+    }});
+  </script>
+</body>
+</html>
+"""
+
+
 PAGE_TEMPLATE = Template(
     r"""<!doctype html>
 <html lang="en">
@@ -1674,10 +2138,7 @@ PAGE_TEMPLATE = Template(
           {% for check in verdict.decision_checks %}
           <div class="check-row check-{{ 'pass' if check.passed else 'fail' }}">
             <span class="check-icon">{{ '✓' if check.passed else '×' }}</span>
-            <div>
-              <strong>{{ check.label }}</strong>
-              <small>{{ check.value }} · {{ check.requirement }}</small>
-            </div>
+            <div><strong>{{ check.label }}</strong><small>{{ check.value }} · {{ check.requirement }}</small></div>
           </div>
           {% endfor %}
         </div>
@@ -1685,16 +2146,12 @@ PAGE_TEMPLATE = Template(
 
       <dl class="metric-list">
         {% for metric in metrics[1:] %}
-        <div class="metric-row">
-          <dt>{{ metric.label }}</dt>
-          <dd>{{ metric.value }}<small>{{ metric.note }}</small></dd>
-        </div>
+        <div class="metric-row"><dt>{{ metric.label }}</dt><dd>{{ metric.value }}<small>{{ metric.note }}</small></dd></div>
         {% endfor %}
       </dl>
 
       <div class="sidebar-foot">
-        <span>Last built</span>
-        <strong>{{ generated }}</strong>
+        <span>Last built</span><strong>{{ generated }}</strong>
         <span id="refresh-status">Checking for updates…</span>
         <span class="source">{{ source }}</span>
       </div>
@@ -1702,19 +2159,12 @@ PAGE_TEMPLATE = Template(
 
     <main class="workspace">
       {% if warnings %}
-      <section class="warnings">
-        {% for warning in warnings %}
-        <div class="warning">{{ warning }}</div>
-        {% endfor %}
-      </section>
+      <section class="warnings">{% for warning in warnings %}<div class="warning">{{ warning }}</div>{% endfor %}</section>
       {% endif %}
 
       <section class="panel chart-panel">
         <div class="panel-heading">
-          <div>
-            <p class="eyebrow">MARKET CONTEXT</p>
-            <h2>Price vs. sentiment</h2>
-          </div>
+          <div><p class="eyebrow">MARKET CONTEXT</p><h2>Price vs. sentiment</h2></div>
           <span class="hint">The action compares sentiment only with historical observations in the same price regime.</span>
         </div>
         {{ chart | safe }}
@@ -1722,26 +2172,40 @@ PAGE_TEMPLATE = Template(
 
       <section class="panel action-panel action-{{ verdict.tone }}">
         <div class="panel-heading">
-          <div>
-            <p class="eyebrow">WHAT TO DO WITH THIS</p>
-            <h2>{{ guidance.tier }}</h2>
-          </div>
+          <div><p class="eyebrow">WHAT TO DO WITH THIS</p><h2>{{ guidance.tier }}</h2></div>
           <span class="hint">Rule-based sizing derived from the checks on the left. Not personalized financial advice.</span>
         </div>
-        <div class="action-sizing">
-          <span class="action-sizing-label">{{ guidance.sizing_label }}</span>
-        </div>
+        <div class="action-sizing"><span class="action-sizing-label">{{ guidance.sizing_label }}</span></div>
         <p class="action-detail">{{ guidance.sizing_detail }}</p>
         <p class="action-guardrail">{{ guidance.guardrail }}</p>
+      </section>
+
+      <section class="panel history-panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">POINT-IN-TIME REPLAY</p><h2>Historical Decisions</h2></div>
+          <a href="decision_history.html">Open full history →</a>
+        </div>
+        <p class="history-description">
+          See the exact historical dates this same decision engine would have shown each action,
+          using only information knowable on that date. {{ history_summary.total }} dates replayed;
+          {{ history_summary.changes }} headline action changes.
+        </p>
+        <div class="history-mini-stats">
+          <div><dt>BUY days</dt><dd>{{ history_summary.buy }}</dd></div>
+          <div><dt>WAIT days</dt><dd>{{ history_summary.wait }}</dd></div>
+          <div><dt>HOLD days</dt><dd>{{ history_summary.hold }}</dd></div>
+          <div><dt>Action changes</dt><dd>{{ history_summary.changes }}</dd></div>
+        </div>
+        <div class="history-downloads">
+          <a href="historical_decisions.csv" download>Every date CSV</a>
+          <a href="decision_changes.csv" download>Changes only CSV</a>
+        </div>
       </section>
 
       <div class="table-grid">
         <section class="panel table-panel outcomes-panel">
           <div class="panel-heading">
-            <div>
-              <p class="eyebrow">ANALOG OUTCOMES</p>
-              <h2>How similar setups actually played out</h2>
-            </div>
+            <div><p class="eyebrow">ANALOG OUTCOMES</p><h2>How similar setups actually played out</h2></div>
             <a href="analogs.csv" download>CSV</a>
           </div>
           {{ outcomes_chart | safe }}
@@ -1751,18 +2215,12 @@ PAGE_TEMPLATE = Template(
             <div><dt>Worst 5D</dt><dd>{{ outcomes_stats.worst_5d }}</dd></div>
             <div><dt>Analogs</dt><dd>{{ outcomes_stats.sample_size }}</dd></div>
           </div>
-          <details>
-            <summary>Show full analog table</summary>
-            <div class="table-wrap">{{ analog_table | safe }}</div>
-          </details>
+          <details><summary>Show full analog table</summary><div class="table-wrap">{{ analog_table | safe }}</div></details>
         </section>
 
         <section class="panel table-panel scorecard-panel">
           <div class="panel-heading">
-            <div>
-              <p class="eyebrow">SIGNAL SCORECARD</p>
-              <h2>Backtests active right now</h2>
-            </div>
+            <div><p class="eyebrow">SIGNAL SCORECARD</p><h2>Backtests active right now</h2></div>
             <a href="event_study.csv" download>CSV</a>
           </div>
           {% if scorecard %}
@@ -1770,37 +2228,25 @@ PAGE_TEMPLATE = Template(
             {% for item in scorecard %}
             <div class="scorecard-row scorecard-{{ item.tone }}">
               <strong>{{ item.label }}</strong>
-              <div class="scorecard-stats">
-                <span>{{ item.events }} events</span>
-                <span>Win {{ item.win_rate }}</span>
-                <span>Avg {{ item.average }}</span>
-                <span>Edge {{ item.excess }}</span>
-              </div>
+              <div class="scorecard-stats"><span>{{ item.events }} events</span><span>Win {{ item.win_rate }}</span><span>Avg {{ item.average }}</span><span>Edge {{ item.excess }}</span></div>
             </div>
             {% endfor %}
           </div>
           {% else %}
           <p class="empty-note">No backtested threshold or drop signal currently matches today's setup closely enough to score. See the full table below.</p>
           {% endif %}
-          <details>
-            <summary>Show full backtest table</summary>
-            <div class="table-wrap">{{ event_study_table | safe }}</div>
-          </details>
+          <details><summary>Show full backtest table</summary><div class="table-wrap">{{ event_study_table | safe }}</div></details>
         </section>
       </div>
 
       <section class="panel note-panel">
         <p class="eyebrow">HOW TO READ THIS</p>
         <p>
-          BUY GRADUALLY requires a positive excess return over the same-regime
-          baseline, a bootstrap confidence interval above zero, and supporting
-          return/drawdown evidence. HOLD / NO EXTRA BUYING means the model does
-          not support an above-normal tactical purchase. It does not tell you to
-          stop a separate long-term contribution plan. WAIT ON BUYING is not
-          a sell signal. The sizing suggestion above restates these same checks
-          as a tiered rule of thumb — adjust the sizing_* values in config.json
-          to match your own plan. Historical performance does not guarantee
-          future results.
+          BUY GRADUALLY requires a positive excess return over the same-regime baseline,
+          a bootstrap confidence interval above zero, and supporting return/drawdown evidence.
+          HOLD / NO EXTRA BUYING means the model does not support an above-normal tactical purchase.
+          WAIT ON BUYING is not a sell signal. The historical replay uses the same rules but withholds
+          future outcomes until they would have been knowable on each replay date.
         </p>
       </section>
     </main>
@@ -1830,15 +2276,10 @@ html, body { height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
 h1, h2, h3, p, dl, dd, dt { margin: 0; }
 a { color: var(--accent); }
-
 .shell { display: grid; grid-template-columns: 330px 1fr; height: 100vh; height: 100dvh; }
-.sidebar {
-  background: var(--sidebar); border-right: 1px solid var(--border); padding: 22px 18px;
-  overflow-y: auto; display: flex; flex-direction: column; gap: 16px;
-}
+.sidebar { background: var(--sidebar); border-right: 1px solid var(--border); padding: 22px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
 .workspace { overflow-y: auto; padding: 22px 26px 36px; display: grid; align-content: start; gap: 16px; }
 .eyebrow { color: var(--accent); font-size: .68rem; font-weight: 800; letter-spacing: .12em; margin-bottom: 4px; }
-
 .brand { display: flex; align-items: center; gap: 10px; padding-bottom: 4px; }
 .brand h1 { font-size: 1.05rem; line-height: 1.25; font-weight: 800; }
 .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: 0 0 10px currentColor; }
@@ -1846,13 +2287,11 @@ a { color: var(--accent); }
 .dot-negative { background: var(--negative); color: var(--negative); }
 .dot-mixed { background: var(--mixed); color: var(--mixed); }
 .dot-neutral { background: var(--faint); color: var(--faint); }
-
 .gauge-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 4px 4px 10px; text-align: center; }
 .gauge-card .plotly-graph-div { margin: 0 auto; }
 .gauge-caption { font-size: .78rem; color: var(--muted); margin-top: -6px; }
 .gauge-caption strong { color: var(--text); font-size: .95rem; }
 .gauge-caption span { display: block; }
-
 .verdict-card { border: 1px solid var(--border); border-radius: 14px; padding: 16px; background: var(--neutral-bg); }
 .verdict-positive { border-color: rgba(47,168,96,.4); background: var(--positive-bg); }
 .verdict-negative { border-color: rgba(209,80,63,.4); background: var(--negative-bg); }
@@ -1864,7 +2303,6 @@ a { color: var(--accent); }
 .verdict-stats dt { color: var(--muted); font-size: .68rem; }
 .verdict-stats dd { font-weight: 800; margin-top: 2px; font-size: .8rem; }
 .verdict-method { font-size: .72rem; color: var(--faint); line-height: 1.35; }
-
 .check-list { display: grid; gap: 5px; margin-top: 12px; }
 .check-row { display: grid; grid-template-columns: 18px 1fr; gap: 7px; align-items: start; padding: 6px 8px; border-radius: 8px; background: rgba(0,0,0,.14); }
 .check-icon { font-weight: 900; line-height: 1.1; }
@@ -1872,17 +2310,14 @@ a { color: var(--accent); }
 .check-fail .check-icon { color: var(--negative); }
 .check-row strong { display: block; font-size: .7rem; }
 .check-row small { display: block; color: var(--faint); font-size: .64rem; margin-top: 1px; }
-
 .metric-list { display: grid; gap: 1px; background: var(--border-soft); border: 1px solid var(--border-soft); border-radius: 12px; overflow: hidden; }
 .metric-row { background: var(--panel); padding: 9px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .metric-row dt { color: var(--muted); font-size: .74rem; }
 .metric-row dd { text-align: right; font-weight: 700; font-size: .84rem; }
 .metric-row dd small { display: block; font-weight: 400; color: var(--faint); font-size: .66rem; }
-
 .sidebar-foot { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border-soft); display: grid; gap: 3px; font-size: .72rem; color: var(--muted); }
 .sidebar-foot strong { color: var(--text); font-size: .78rem; }
 .sidebar-foot .source { color: var(--faint); }
-
 .warnings { display: grid; gap: 8px; }
 .warning { padding: 10px 14px; border: 1px solid rgba(210,167,45,.4); border-radius: 10px; background: var(--mixed-bg); color: #e8cf7a; font-size: .85rem; }
 .panel { border: 1px solid var(--border); border-radius: 16px; background: var(--panel); padding: 18px 20px; }
@@ -1892,19 +2327,21 @@ a { color: var(--accent); }
 .panel-heading a:hover { border-color: var(--accent); }
 .hint { color: var(--faint); font-size: .76rem; max-width: 340px; text-align: right; }
 .chart-panel .plotly-graph-div { width: 100% !important; }
-
 .action-panel { border-width: 1px; }
 .action-positive { border-color: rgba(47,168,96,.4); background: linear-gradient(180deg, var(--positive-bg), var(--panel) 70%); }
 .action-negative { border-color: rgba(209,80,63,.4); background: linear-gradient(180deg, var(--negative-bg), var(--panel) 70%); }
 .action-mixed { border-color: rgba(210,167,45,.4); background: linear-gradient(180deg, var(--mixed-bg), var(--panel) 70%); }
 .action-sizing { margin: 4px 0 10px; }
-.action-sizing-label {
-  display: inline-block; font-size: 1.1rem; font-weight: 800; padding: 7px 16px;
-  border-radius: 999px; background: rgba(90,169,255,.14); color: var(--accent);
-}
+.action-sizing-label { display: inline-block; font-size: 1.1rem; font-weight: 800; padding: 7px 16px; border-radius: 999px; background: rgba(90,169,255,.14); color: var(--accent); }
 .action-detail { font-size: .85rem; color: var(--muted); line-height: 1.5; margin-bottom: 8px; }
 .action-guardrail { font-size: .76rem; color: var(--faint); font-style: italic; }
-
+.history-description { color: var(--muted); font-size:.84rem; line-height:1.5; }
+.history-mini-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin:12px 0; }
+.history-mini-stats div { background:rgba(0,0,0,.18); border-radius:9px; padding:9px 10px; }
+.history-mini-stats dt { color:var(--muted); font-size:.68rem; }
+.history-mini-stats dd { font-weight:800; margin-top:2px; }
+.history-downloads { display:flex; gap:10px; flex-wrap:wrap; }
+.history-downloads a { font-size:.76rem; font-weight:700; }
 .table-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
 .table-panel { display: flex; flex-direction: column; min-width: 0; }
 .table-wrap { overflow: auto; border: 1px solid var(--border-soft); border-radius: 10px; max-height: 320px; }
@@ -1913,13 +2350,11 @@ a { color: var(--accent); }
 .data-table th:first-child, .data-table td:first-child { text-align: left; }
 .data-table thead th { position: sticky; top: 0; background: var(--panel-2); color: var(--muted); font-weight: 700; z-index: 1; }
 .data-table tbody tr:hover { background: rgba(90,169,255,.06); }
-
 .outcomes-panel .plotly-graph-div { width: 100% !important; }
 .outcomes-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0 4px; }
 .outcomes-stats div { background: rgba(0,0,0,.18); border-radius: 9px; padding: 8px 6px; text-align: center; }
 .outcomes-stats dt { color: var(--muted); font-size: .64rem; display: block; }
 .outcomes-stats dd { font-weight: 800; font-size: .84rem; margin-top: 2px; }
-
 .scorecard-list { display: grid; gap: 8px; }
 .scorecard-row { border-radius: 10px; padding: 10px 12px; background: rgba(0,0,0,.16); border-left: 3px solid var(--faint); }
 .scorecard-positive { border-left-color: var(--positive); background: var(--positive-bg); }
@@ -1927,16 +2362,13 @@ a { color: var(--accent); }
 .scorecard-row strong { display: block; font-size: .82rem; margin-bottom: 5px; }
 .scorecard-stats { display: flex; gap: 12px; flex-wrap: wrap; font-size: .72rem; color: var(--muted); }
 .empty-note { color: var(--faint); font-size: .82rem; line-height: 1.5; }
-
 details { margin-top: 12px; }
 details summary { cursor: pointer; font-size: .76rem; color: var(--accent); font-weight: 700; padding: 4px 0; list-style: none; }
 details summary::-webkit-details-marker { display: none; }
 details summary::before { content: "▸ "; }
 details[open] summary::before { content: "▾ "; }
 details .table-wrap { margin-top: 8px; }
-
 .note-panel p { font-size: .8rem; color: var(--muted); line-height: 1.5; }
-
 @media (max-width: 1050px) { .table-grid { grid-template-columns: 1fr; } }
 @media (max-width: 860px) {
   .shell { grid-template-columns: 1fr; height: auto; }
@@ -1945,6 +2377,7 @@ details .table-wrap { margin-top: 8px; }
   .metric-list { grid-template-columns: 1fr 1fr; display: grid; }
   .hint { text-align: left; max-width: none; }
   .outcomes-stats { grid-template-columns: 1fr 1fr; }
+  .history-mini-stats { grid-template-columns:1fr 1fr; }
 }
 """
 
@@ -2008,6 +2441,55 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
 
     generated = datetime.now(timezone.utc)
     build_id = generated.strftime("%Y%m%dT%H%M%SZ")
+
+    print("[history] building point-in-time historical decision replay...")
+    history = replay_historical_decisions(
+        settings,
+        daily,
+        market,
+        events,
+        progress_every=100,
+    )
+    changes = decision_change_rows(history)
+
+    history.to_csv(site_dir / "historical_decisions.csv", index=False)
+    changes.to_csv(site_dir / "decision_changes.csv", index=False)
+    history_payload = {
+        "generated_at": generated.isoformat(),
+        "data_source": source_label,
+        "method": "point_in_time_replay_of_current_dashboard_engine",
+        "notes": [
+            "5-day returns are exposed only after the fifth trading session is known.",
+            "20-day returns are exposed only after the twentieth trading session is known.",
+            "20-day drawdown is recomputed through each replay cutoff.",
+            "WAIT ON BUYING is not a SELL action; the current dashboard has no automatic SELL action.",
+        ],
+        "decisions": _history_records(history),
+        "action_changes": _history_records(changes),
+    }
+    (site_dir / "historical_decisions.json").write_text(
+        json.dumps(history_payload, indent=2, allow_nan=False),
+        encoding="utf-8",
+    )
+    (site_dir / "decision_history.html").write_text(
+        render_history_page(
+            history,
+            changes,
+            generated_at=generated,
+            data_source=source_label,
+        ),
+        encoding="utf-8",
+    )
+
+    history_counts = history["action"].value_counts().to_dict() if not history.empty else {}
+    history_summary = {
+        "total": int(len(history)),
+        "changes": int(len(changes)),
+        "buy": int(history_counts.get("BUY GRADUALLY", 0)),
+        "wait": int(history_counts.get("WAIT ON BUYING", 0)),
+        "hold": int(history_counts.get("HOLD / NO EXTRA BUYING", 0)),
+        "insufficient": int(history_counts.get("INSUFFICIENT EVIDENCE", 0)),
+    }
 
     gaps = daily.index.to_series().diff().dt.days.dropna()
     large_gap_count = int((gaps > 7).sum())
@@ -2156,7 +2638,7 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
         },
     }
 
-    html = PAGE_TEMPLATE.render(
+    dashboard_html = PAGE_TEMPLATE.render(
         build_id=build_id,
         refresh_seconds=settings.refresh_seconds,
         source=source_label,
@@ -2171,6 +2653,7 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
         outcomes_chart=render_analog_outcomes_chart(analogs, regime_baseline),
         outcomes_stats=outcomes_stats,
         scorecard=scorecard,
+        history_summary=history_summary,
         event_study_table=render_table(
             study,
             {
@@ -2186,7 +2669,7 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
         analog_table=render_table(analog_export, analog_percent_columns),
     )
 
-    (site_dir / "index.html").write_text(html, encoding="utf-8")
+    (site_dir / "index.html").write_text(dashboard_html, encoding="utf-8")
     (site_dir / "styles.css").write_text(STYLES_CSS, encoding="utf-8")
     (site_dir / "app.js").write_text(APP_JS, encoding="utf-8")
     (site_dir / ".nojekyll").write_text("", encoding="utf-8")
@@ -2221,6 +2704,7 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
         },
         "verdict": asdict(verdict),
         "position_guidance": asdict(guidance),
+        "historical_decisions": history_summary,
         "warnings": warnings,
     }
 
@@ -2240,9 +2724,7 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
     )
 
     print(f"Data source : {source_label}")
-    print(
-        f"Coverage    : {daily.index.min().date()} through {daily.index.max().date()}"
-    )
+    print(f"Coverage    : {daily.index.min().date()} through {daily.index.max().date()}")
     print(f"Observations: {len(daily)}")
     print(f"Regime      : {pretty_regime(verdict.market_regime)}")
     print(
@@ -2250,6 +2732,7 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
         f"({verdict.confidence} confidence, n={verdict.sample_size})"
     )
     print(f"Sizing      : {guidance.tier} — {guidance.sizing_label}")
+    print(f"History     : {len(history)} decisions, {len(changes)} action changes")
     print(f"Site        : {site_dir / 'index.html'}")
 
 
