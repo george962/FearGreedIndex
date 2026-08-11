@@ -116,6 +116,14 @@ class Settings:
     normal_maximum_average_drawdown_20d: float = -0.04
     high_extension_maximum_average_drawdown_20d: float = -0.03
 
+    # Position-sizing tiers shown in the "What to do with this" panel.
+    # These are illustrative defaults, not personalized financial advice —
+    # tune them to whatever your own contribution plan looks like.
+    sizing_strong_buy_pct: int = 150
+    sizing_modest_buy_low_pct: int = 110
+    sizing_modest_buy_high_pct: int = 125
+    sizing_strong_buy_min_checks_ratio: float = 0.8
+
     @classmethod
     def load(cls, path: Path) -> "Settings":
         if not path.exists():
@@ -1134,6 +1142,100 @@ def score_analogs(
     )
 
 
+# =============================================================================
+# Position-sizing guidance ("what do I actually do with this")
+# =============================================================================
+
+@dataclass
+class PositionGuidance:
+    tier: str
+    sizing_label: str
+    sizing_detail: str
+    guardrail: str
+
+
+def build_position_guidance(verdict: Verdict, settings: Settings) -> PositionGuidance:
+    """
+    Translate the verdict into a concrete, rule-based sizing suggestion.
+
+    This does not invent new evidence — it only restates the same checks
+    already computed in score_analogs() as a tiered action. It is a research
+    heuristic you can tune (see the sizing_* fields in Settings), not
+    personalized financial advice.
+    """
+    checks_ratio = (
+        verdict.positive_checks_passed / verdict.positive_checks_total
+        if verdict.positive_checks_total
+        else 0.0
+    )
+    worst_note = (
+        f"Worst same-regime analog was {fmt_pct(verdict.worst_5d)} over the "
+        "next 5 sessions — size any addition so that outcome would still be "
+        "tolerable."
+        if verdict.worst_5d is not None
+        else "No worst-case analog is available yet to size against."
+    )
+
+    if verdict.action == "BUY GRADUALLY":
+        if checks_ratio >= settings.sizing_strong_buy_min_checks_ratio:
+            tier = "Elevated tactical buy"
+            sizing_label = f"~{settings.sizing_strong_buy_pct}% of your normal buy"
+            sizing_detail = (
+                "Same-regime analogs cleared nearly every test "
+                f"({verdict.positive_checks_passed}/{verdict.positive_checks_total}). "
+                "Consider stepping up your usual contribution, still spread across "
+                "more than one purchase rather than deployed all at once."
+            )
+        else:
+            tier = "Modest tactical buy"
+            sizing_label = (
+                f"~{settings.sizing_modest_buy_low_pct}-"
+                f"{settings.sizing_modest_buy_high_pct}% of your normal buy"
+            )
+            sizing_detail = (
+                "The edge cleared the bar but not by a wide margin "
+                f"({verdict.positive_checks_passed}/{verdict.positive_checks_total} "
+                "checks passed). A small step-up over your normal size, staged "
+                "over 2-3 purchases, keeps risk contained if the edge doesn't hold."
+            )
+        guardrail = worst_note
+    elif verdict.action == "WAIT ON BUYING":
+        tier = "Pause discretionary buying"
+        sizing_label = "Skip this week's extra buy"
+        sizing_detail = (
+            "Same-regime analogs skewed negative with reasonable statistical "
+            "confidence. Consider skipping or delaying any discretionary buy "
+            "while keeping scheduled/automatic contributions running as normal."
+        )
+        guardrail = "This is a pause on new buying, not a signal to sell existing positions."
+    elif verdict.action == "HOLD / NO EXTRA BUYING":
+        tier = "Stay at your baseline"
+        sizing_label = "Normal plan only, no discretionary add"
+        sizing_detail = (
+            "The evidence doesn't clear the bar for an above-normal purchase, "
+            "but it isn't negative enough to justify pulling back either. Keep "
+            "scheduled contributions as-is and skip extra discretionary buying "
+            "until conditions clarify."
+        )
+        guardrail = "Not a sell signal — this only withholds an above-normal buy."
+    else:
+        tier = "No reliable tactical read"
+        sizing_label = "Fall back to your baseline plan"
+        sizing_detail = (
+            "Too few independent same-regime analogs exist right now to trust "
+            "a tactical signal either way. Treat this like a normal week and "
+            "keep whatever plan you'd otherwise follow."
+        )
+        guardrail = "Insufficient evidence — not a bullish or bearish signal."
+
+    return PositionGuidance(
+        tier=tier,
+        sizing_label=sizing_label,
+        sizing_detail=sizing_detail,
+        guardrail=guardrail,
+    )
+
+
 def build_event_study(events: pd.DataFrame, settings: Settings) -> pd.DataFrame:
     baseline = _safe_mean(events["forward_5d"])
     rows: list[dict[str, Any]] = []
@@ -1184,6 +1286,80 @@ def build_event_study(events: pd.DataFrame, settings: Settings) -> pd.DataFrame:
             )
 
     return pd.DataFrame(rows)
+
+
+def build_signal_scorecard(study: pd.DataFrame, current: pd.Series) -> pd.DataFrame:
+    """
+    Narrow the full event study down to the handful of backtested signals
+    that are actually "live" given today's Fear & Greed level and recent
+    move, so the right-hand panel shows what's relevant today instead of
+    every threshold ever tested.
+    """
+    if study.empty:
+        return study.iloc[0:0]
+
+    fg = current.get("fear_greed")
+    matches: list[pd.DataFrame] = []
+
+    level_rows = study[study["Signal"].str.startswith("Fear & Greed")].copy()
+    if pd.notna(fg) and not level_rows.empty:
+        level_rows["_threshold"] = (
+            level_rows["Signal"].str.extract(r"≤\s*(\d+)").astype(float)[0]
+        )
+        active_levels = level_rows[level_rows["_threshold"] >= float(fg)]
+        if not active_levels.empty:
+            tightest = active_levels.sort_values("_threshold").iloc[[0]]
+            matches.append(tightest.drop(columns="_threshold"))
+
+    drop_rows = study[study["Signal"].str.contains("obs drop", regex=False)].copy()
+    if not drop_rows.empty:
+
+        def drop_is_active(row: pd.Series) -> bool:
+            try:
+                window = int(row["Signal"].split("-obs")[0])
+                threshold = int(row["Signal"].split("≥")[-1].strip())
+            except (ValueError, IndexError):
+                return False
+            change_value = current.get(f"fg_change_{window}")
+            return pd.notna(change_value) and float(change_value) <= -threshold
+
+        active_drops = drop_rows[drop_rows.apply(drop_is_active, axis=1)]
+        if not active_drops.empty:
+            matches.append(active_drops)
+
+    if not matches:
+        return study.iloc[0:0]
+
+    combined = pd.concat(matches, ignore_index=True)
+    combined = combined.drop_duplicates(subset="Signal")
+    return combined.sort_values(
+        "Excess vs baseline 5D", ascending=False, na_position="last"
+    ).head(5)
+
+
+def format_scorecard(rows: pd.DataFrame, edge_threshold: float = 0.003) -> list[dict[str, Any]]:
+    """Turn scorecard rows into small, template-friendly cards with a tone."""
+    items: list[dict[str, Any]] = []
+    for _, row in rows.iterrows():
+        excess = row.get("Excess vs baseline 5D")
+        tone = "neutral"
+        if pd.notna(excess):
+            if excess > edge_threshold:
+                tone = "positive"
+            elif excess < -edge_threshold:
+                tone = "negative"
+
+        items.append(
+            {
+                "label": row["Signal"],
+                "events": int(row["Events"]) if pd.notna(row["Events"]) else 0,
+                "win_rate": fmt_pct(row.get("Win rate 5D")),
+                "average": fmt_pct(row.get("Average 5D"), 2),
+                "excess": fmt_pct(excess, 2),
+                "tone": tone,
+            }
+        )
+    return items
 
 
 # =============================================================================
@@ -1351,6 +1527,82 @@ def render_gauge(value: float) -> str:
     )
 
 
+def render_analog_outcomes_chart(
+    analogs: pd.DataFrame,
+    regime_baseline: pd.DataFrame,
+) -> str:
+    """
+    Show how the current analogs actually played out over the next 5
+    sessions, next to the same-regime baseline, as a strip/box plot instead
+    of a raw table of numbers.
+    """
+    analog_returns = (
+        pd.to_numeric(analogs.get("forward_5d"), errors="coerce").dropna() * 100
+    )
+    baseline_returns = (
+        pd.to_numeric(regime_baseline.get("forward_5d"), errors="coerce").dropna() * 100
+    )
+
+    figure = go.Figure()
+
+    if not baseline_returns.empty:
+        figure.add_trace(
+            go.Box(
+                x=baseline_returns,
+                name="Same-regime baseline",
+                boxpoints=False,
+                marker_color="rgba(148,163,184,.55)",
+                line_color="rgba(148,163,184,.65)",
+                fillcolor="rgba(148,163,184,.12)",
+                orientation="h",
+            )
+        )
+
+    if not analog_returns.empty:
+        figure.add_trace(
+            go.Box(
+                x=analog_returns,
+                name="Current analogs",
+                boxpoints="all",
+                jitter=0.45,
+                pointpos=0,
+                marker={"color": CHART_LINE, "size": 5, "opacity": 0.75},
+                line_color=CHART_LINE,
+                fillcolor="rgba(90,169,255,.10)",
+                orientation="h",
+            )
+        )
+
+    figure.add_vline(
+        x=0,
+        line_width=1,
+        line_dash="dot",
+        line_color="rgba(255,255,255,.35)",
+    )
+
+    figure.update_layout(
+        template="plotly_dark",
+        height=190,
+        paper_bgcolor=CHART_BG,
+        plot_bgcolor=CHART_BG,
+        font={"color": CHART_TEXT, "size": 11},
+        margin={"l": 110, "r": 24, "t": 10, "b": 32},
+        showlegend=False,
+        xaxis={
+            "title": "5-day forward return (%)",
+            "gridcolor": CHART_GRID,
+            "zeroline": False,
+        },
+        yaxis={"gridcolor": CHART_GRID},
+    )
+
+    return figure.to_html(
+        full_html=False,
+        include_plotlyjs=False,
+        config={"responsive": True, "displaylogo": False},
+    )
+
+
 def render_table(
     frame: pd.DataFrame,
     percent_columns: set[str] = frozenset(),
@@ -1468,27 +1720,72 @@ PAGE_TEMPLATE = Template(
         {{ chart | safe }}
       </section>
 
-      <div class="table-grid">
-        <section class="panel table-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">EVENT STUDY</p>
-              <h2>Threshold &amp; drop backtests</h2>
-            </div>
-            <a href="event_study.csv" download>CSV</a>
+      <section class="panel action-panel action-{{ verdict.tone }}">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">WHAT TO DO WITH THIS</p>
+            <h2>{{ guidance.tier }}</h2>
           </div>
-          <div class="table-wrap">{{ event_study_table | safe }}</div>
-        </section>
+          <span class="hint">Rule-based sizing derived from the checks on the left. Not personalized financial advice.</span>
+        </div>
+        <div class="action-sizing">
+          <span class="action-sizing-label">{{ guidance.sizing_label }}</span>
+        </div>
+        <p class="action-detail">{{ guidance.sizing_detail }}</p>
+        <p class="action-guardrail">{{ guidance.guardrail }}</p>
+      </section>
 
-        <section class="panel table-panel">
+      <div class="table-grid">
+        <section class="panel table-panel outcomes-panel">
           <div class="panel-heading">
             <div>
-              <p class="eyebrow">CURRENT ANALOGS</p>
-              <h2>Same-regime historical setups</h2>
+              <p class="eyebrow">ANALOG OUTCOMES</p>
+              <h2>How similar setups actually played out</h2>
             </div>
             <a href="analogs.csv" download>CSV</a>
           </div>
-          <div class="table-wrap">{{ analog_table | safe }}</div>
+          {{ outcomes_chart | safe }}
+          <div class="outcomes-stats">
+            <div><dt>Win rate</dt><dd>{{ outcomes_stats.win_rate }}</dd></div>
+            <div><dt>Median 5D</dt><dd>{{ outcomes_stats.median_5d }}</dd></div>
+            <div><dt>Worst 5D</dt><dd>{{ outcomes_stats.worst_5d }}</dd></div>
+            <div><dt>Analogs</dt><dd>{{ outcomes_stats.sample_size }}</dd></div>
+          </div>
+          <details>
+            <summary>Show full analog table</summary>
+            <div class="table-wrap">{{ analog_table | safe }}</div>
+          </details>
+        </section>
+
+        <section class="panel table-panel scorecard-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">SIGNAL SCORECARD</p>
+              <h2>Backtests active right now</h2>
+            </div>
+            <a href="event_study.csv" download>CSV</a>
+          </div>
+          {% if scorecard %}
+          <div class="scorecard-list">
+            {% for item in scorecard %}
+            <div class="scorecard-row scorecard-{{ item.tone }}">
+              <strong>{{ item.label }}</strong>
+              <div class="scorecard-stats">
+                <span>{{ item.events }} events</span>
+                <span>Win {{ item.win_rate }}</span>
+                <span>Avg {{ item.average }}</span>
+                <span>Edge {{ item.excess }}</span>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="empty-note">No backtested threshold or drop signal currently matches today's setup closely enough to score. See the full table below.</p>
+          {% endif %}
+          <details>
+            <summary>Show full backtest table</summary>
+            <div class="table-wrap">{{ event_study_table | safe }}</div>
+          </details>
         </section>
       </div>
 
@@ -1500,7 +1797,10 @@ PAGE_TEMPLATE = Template(
           return/drawdown evidence. HOLD / NO EXTRA BUYING means the model does
           not support an above-normal tactical purchase. It does not tell you to
           stop a separate long-term contribution plan. WAIT ON BUYING is not
-          a sell signal. Historical performance does not guarantee future results.
+          a sell signal. The sizing suggestion above restates these same checks
+          as a tiered rule of thumb — adjust the sizing_* values in config.json
+          to match your own plan. Historical performance does not guarantee
+          future results.
         </p>
       </section>
     </main>
@@ -1592,14 +1892,49 @@ a { color: var(--accent); }
 .panel-heading a:hover { border-color: var(--accent); }
 .hint { color: var(--faint); font-size: .76rem; max-width: 340px; text-align: right; }
 .chart-panel .plotly-graph-div { width: 100% !important; }
+
+.action-panel { border-width: 1px; }
+.action-positive { border-color: rgba(47,168,96,.4); background: linear-gradient(180deg, var(--positive-bg), var(--panel) 70%); }
+.action-negative { border-color: rgba(209,80,63,.4); background: linear-gradient(180deg, var(--negative-bg), var(--panel) 70%); }
+.action-mixed { border-color: rgba(210,167,45,.4); background: linear-gradient(180deg, var(--mixed-bg), var(--panel) 70%); }
+.action-sizing { margin: 4px 0 10px; }
+.action-sizing-label {
+  display: inline-block; font-size: 1.1rem; font-weight: 800; padding: 7px 16px;
+  border-radius: 999px; background: rgba(90,169,255,.14); color: var(--accent);
+}
+.action-detail { font-size: .85rem; color: var(--muted); line-height: 1.5; margin-bottom: 8px; }
+.action-guardrail { font-size: .76rem; color: var(--faint); font-style: italic; }
+
 .table-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
 .table-panel { display: flex; flex-direction: column; min-width: 0; }
-.table-wrap { overflow: auto; border: 1px solid var(--border-soft); border-radius: 10px; max-height: 360px; }
+.table-wrap { overflow: auto; border: 1px solid var(--border-soft); border-radius: 10px; max-height: 320px; }
 .data-table { width: 100%; border-collapse: collapse; font-size: .78rem; white-space: nowrap; }
 .data-table th, .data-table td { padding: 7px 10px; border-bottom: 1px solid var(--border-soft); text-align: right; }
 .data-table th:first-child, .data-table td:first-child { text-align: left; }
 .data-table thead th { position: sticky; top: 0; background: var(--panel-2); color: var(--muted); font-weight: 700; z-index: 1; }
 .data-table tbody tr:hover { background: rgba(90,169,255,.06); }
+
+.outcomes-panel .plotly-graph-div { width: 100% !important; }
+.outcomes-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0 4px; }
+.outcomes-stats div { background: rgba(0,0,0,.18); border-radius: 9px; padding: 8px 6px; text-align: center; }
+.outcomes-stats dt { color: var(--muted); font-size: .64rem; display: block; }
+.outcomes-stats dd { font-weight: 800; font-size: .84rem; margin-top: 2px; }
+
+.scorecard-list { display: grid; gap: 8px; }
+.scorecard-row { border-radius: 10px; padding: 10px 12px; background: rgba(0,0,0,.16); border-left: 3px solid var(--faint); }
+.scorecard-positive { border-left-color: var(--positive); background: var(--positive-bg); }
+.scorecard-negative { border-left-color: var(--negative); background: var(--negative-bg); }
+.scorecard-row strong { display: block; font-size: .82rem; margin-bottom: 5px; }
+.scorecard-stats { display: flex; gap: 12px; flex-wrap: wrap; font-size: .72rem; color: var(--muted); }
+.empty-note { color: var(--faint); font-size: .82rem; line-height: 1.5; }
+
+details { margin-top: 12px; }
+details summary { cursor: pointer; font-size: .76rem; color: var(--accent); font-weight: 700; padding: 4px 0; list-style: none; }
+details summary::-webkit-details-marker { display: none; }
+details summary::before { content: "▸ "; }
+details[open] summary::before { content: "▾ "; }
+details .table-wrap { margin-top: 8px; }
+
 .note-panel p { font-size: .8rem; color: var(--muted); line-height: 1.5; }
 
 @media (max-width: 1050px) { .table-grid { grid-template-columns: 1fr; } }
@@ -1609,6 +1944,7 @@ a { color: var(--accent); }
   .workspace { overflow-y: visible; padding: 18px 16px 30px; }
   .metric-list { grid-template-columns: 1fr 1fr; display: grid; }
   .hint { text-align: left; max-width: none; }
+  .outcomes-stats { grid-template-columns: 1fr 1fr; }
 }
 """
 
@@ -1665,7 +2001,10 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
         analog_method,
         settings,
     )
+    guidance = build_position_guidance(verdict, settings)
     study = build_event_study(events, settings)
+    scorecard_rows = build_signal_scorecard(study, current)
+    scorecard = format_scorecard(scorecard_rows)
 
     generated = datetime.now(timezone.utc)
     build_id = generated.strftime("%Y%m%dT%H%M%SZ")
@@ -1776,6 +2115,13 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
         },
     ]
 
+    outcomes_stats = {
+        "win_rate": fmt_pct(verdict.win_rate_5d),
+        "median_5d": fmt_pct(verdict.median_5d),
+        "worst_5d": fmt_pct(verdict.worst_5d),
+        "sample_size": verdict.sample_size,
+    }
+
     analog_columns = [
         "signal_date",
         "fear_greed",
@@ -1816,11 +2162,15 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
         source=source_label,
         generated=generated.strftime("%Y-%m-%d %H:%M UTC"),
         verdict=verdict,
+        guidance=guidance,
         regime_label=pretty_regime(verdict.market_regime),
         warnings=warnings,
         metrics=metrics,
         chart=render_chart(daily, market),
         gauge=render_gauge(float(current["fear_greed"])),
+        outcomes_chart=render_analog_outcomes_chart(analogs, regime_baseline),
+        outcomes_stats=outcomes_stats,
+        scorecard=scorecard,
         event_study_table=render_table(
             study,
             {
@@ -1870,6 +2220,7 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
             "volatility_20d": current.get("volatility_20d"),
         },
         "verdict": asdict(verdict),
+        "position_guidance": asdict(guidance),
         "warnings": warnings,
     }
 
@@ -1898,6 +2249,7 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
         f"Action      : {verdict.action} "
         f"({verdict.confidence} confidence, n={verdict.sample_size})"
     )
+    print(f"Sizing      : {guidance.tier} — {guidance.sizing_label}")
     print(f"Site        : {site_dir / 'index.html'}")
 
 
