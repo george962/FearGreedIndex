@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate_v3_foundation:
+  validate_v3:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -36,12 +36,8 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      - name: Run v3 foundation unit tests
-        run: |
-          python -m unittest -v \
-            v3.tests.test_features \
-            v3.tests.test_labels \
-            v3.tests.test_leakage
+      - name: Run all v3 unit tests
+        run: python -m unittest discover -s v3/tests -p "test_*.py" -v
 
       - name: Build point-in-time features
         run: python v3/features/build_features.py
@@ -58,11 +54,11 @@ jobs:
       - name: Verify frozen baseline is reproducible
         run: git diff --exit-code -- reports/baseline_v2_1/
 
-      - name: Upload v3 foundation evidence
+      - name: Upload v3 evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: v3-foundation-evidence-${{ github.run_id }}
+          name: v3-evidence-${{ github.run_id }}
           path: |
             reports/baseline_v2_1/
             v3/reports/
