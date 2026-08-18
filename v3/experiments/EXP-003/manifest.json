@@ -1,0 +1,32 @@
+{
+  "ci_run_id": 32197501410,
+  "code_commit_sha": "6ab4c6e48fd5ab637e4aa4879ea37babcc11add6",
+  "data_sha256": "16d6528800ce12ff92b8e6e9f7ec0764450b11165baf7e14d429fde443cd96f1",
+  "experiment_id": "EXP-003",
+  "feature_set_version": "v3-features-001",
+  "fold_metrics_sha256": "54ddc45a72e11f83011b841c6a8f338732396910486457c3020ec804e648d501",
+  "hyperparameters": {
+    "l2_regularization": 1.0,
+    "learning_rate": 0.05,
+    "max_iter": 150,
+    "max_leaf_nodes": 15,
+    "min_samples_leaf": 20,
+    "random_state": 42
+  },
+  "immutable": true,
+  "label_version": "v3-labels-001",
+  "metrics_artifact_sha256": "5db6afaea55f9d6cb7f4fdbbf69262ed1fe8eb6c52714184a5d8e8648e4c2bcc",
+  "model_name": "hist_gradient_boosting_v1",
+  "model_type": "histogram_gradient_boosting",
+  "notes": "First fixed nonlinear candidate. Mixed unseen performance is preserved without post-hoc tuning.",
+  "predictions_sha256": "d072a89c2d2bc3335adec92ce9987be636fc1898d16e8a36454b13d94c4c5557",
+  "promotion_status": "not_evaluated",
+  "random_seed": 42,
+  "status": "candidate",
+  "task": "V3-007",
+  "training_test_periods": [
+    {"fold": "2024", "test_end": "2024-12-31", "test_start": "2024-01-01", "train_end": "2023-12-31"},
+    {"fold": "2025", "test_end": "2025-12-31", "test_start": "2025-01-01", "train_end": "2024-12-31"},
+    {"fold": "2026_ytd", "test_end": "2026-12-31", "test_start": "2026-01-01", "train_end": "2025-12-31"}
+  ]
+}
