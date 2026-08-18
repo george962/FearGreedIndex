@@ -1,0 +1,48 @@
+{
+  "ci_run_id": 32196286533,
+  "code_commit_sha": "f5e6bfe67563e939ba8f44644984daf244153db9",
+  "data_sha256": "16d6528800ce12ff92b8e6e9f7ec0764450b11165baf7e14d429fde443cd96f1",
+  "experiment_id": "EXP-001",
+  "feature_set_version": "v3-features-001",
+  "fold_metrics_sha256": "35ed797d1cbaf4d784d7e2ec2900e3098cf9932f008b9123baa9b22be54127c6",
+  "hyperparameters": {
+    "C": 1.0,
+    "imputer": "training_median",
+    "max_iter": 2000,
+    "penalty": "l2",
+    "random_seed": 42,
+    "scaler": "training_standard_scaler",
+    "solver": "liblinear"
+  },
+  "immutable": true,
+  "label_version": "v3-labels-001",
+  "metrics_sha256": "4e393ac68678193f4a1038e37625fb378ed71816a4e74fc587f11ed6b5ef06e3",
+  "model_name": "logistic_l2_v1",
+  "model_type": "regularized_logistic_classification",
+  "notes": "First untuned regularized logistic baseline. Preserved as observed; weak folds are not retuned away.",
+  "predictions_sha256": "389de8db830e2b9771eb5ea72fbd0b2b4ec52e115b318944513256d1ad769de7",
+  "promotion_status": "not_evaluated",
+  "random_seed": 42,
+  "status": "baseline",
+  "task": "V3-005",
+  "training_test_periods": [
+    {
+      "fold": "2024",
+      "test_end": "2024-12-31",
+      "test_start": "2024-01-01",
+      "train_end": "2023-12-31"
+    },
+    {
+      "fold": "2025",
+      "test_end": "2025-12-31",
+      "test_start": "2025-01-01",
+      "train_end": "2024-12-31"
+    },
+    {
+      "fold": "2026_ytd",
+      "test_end": "2026-12-31",
+      "test_start": "2026-01-01",
+      "train_end": "2025-12-31"
+    }
+  ]
+}

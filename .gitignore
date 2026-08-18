@@ -15,3 +15,4 @@ reports/*.json
 
 v3/data/*.parquet
 v3/reports/*.json
+v3/reports/*.parquet

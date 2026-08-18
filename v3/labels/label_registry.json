@@ -1,0 +1,21 @@
+{
+  "version": "v3-labels-001",
+  "execution_convention": "Decision on date T enters at the next tradable session open; horizon session 1 is the entry session.",
+  "labels": [
+    {"name": "forward_return_5d", "type": "regression", "horizon_sessions": 5},
+    {"name": "forward_return_20d", "type": "regression", "horizon_sessions": 20},
+    {"name": "forward_return_60d", "type": "regression", "horizon_sessions": 60},
+    {"name": "forward_positive_5d", "type": "classification", "horizon_sessions": 5},
+    {"name": "forward_positive_20d", "type": "classification", "horizon_sessions": 20},
+    {"name": "forward_positive_60d", "type": "classification", "horizon_sessions": 60},
+    {"name": "max_drawdown_5d", "type": "risk_regression", "horizon_sessions": 5},
+    {"name": "max_drawdown_20d", "type": "risk_regression", "horizon_sessions": 20},
+    {"name": "max_drawdown_60d", "type": "risk_regression", "horizon_sessions": 60},
+    {"name": "further_5pct_decline_20d", "type": "risk_classification", "horizon_sessions": 20}
+  ],
+  "availability_fields": [
+    "_forward_5d_known_date",
+    "_forward_20d_known_date",
+    "_forward_60d_known_date"
+  ]
+}
