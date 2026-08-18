@@ -1,0 +1,67 @@
+name: Validate Fear and Greed Strategy
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "15 14 * * 6"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fear-greed-strategy-validation
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run all strategy tests
+        run: |
+          python -m unittest -v \
+            test_feargreed.py \
+            test_fear_greed_market_data.py \
+            test_dashboard.py \
+            test_strategy_validation.py \
+            test_signal_ledger.py
+
+      - name: Run anchored walk-forward validation
+        run: |
+          python scripts/strategy_validation.py \
+            --config config.json \
+            --manifest strategy_manifest.json \
+            --output-dir reports
+
+      - name: Run unified backtest
+        run: |
+          python backtest.py \
+            --config config.json \
+            --manifest strategy_manifest.json \
+            --output-dir reports
+
+      - name: Upload validation reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: feargreed-validation-${{ github.run_id }}
+          path: reports/
+          if-no-files-found: error
+          retention-days: 90

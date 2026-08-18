@@ -22,14 +22,14 @@ concurrency:
 
 jobs:
   update-market-data:
-    name: Update analysis-ready SPX dataset
+    name: Update analysis-ready SPX dataset and signal ledger
 
     if: >-
       github.event_name != 'workflow_run' ||
       github.event.workflow_run.conclusion == 'success'
 
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Check out main
@@ -50,9 +50,11 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      - name: Run market-data tests
+      - name: Run market and ledger tests
         run: |
-          python -m unittest -v test_fear_greed_market_data.py
+          python -m unittest -v \
+            test_fear_greed_market_data.py \
+            test_signal_ledger.py
 
       - name: Build Fear and Greed SPX dataset
         run: |
@@ -62,15 +64,23 @@ jobs:
             --output data/fear_greed_spx_daily.csv \
             --json
 
-      - name: Commit changed datasets
+      - name: Record immutable decision and mature old outcomes
+        run: |
+          python scripts/signal_ledger.py \
+            --config config.json \
+            --manifest strategy_manifest.json \
+            --ledger data/signal_ledger.csv
+
+      - name: Commit changed datasets and ledger
         shell: bash
         run: |
           set -euo pipefail
 
           if [ -z "$(git status --porcelain -- \
             data/spx_daily.csv \
-            data/fear_greed_spx_daily.csv)" ]; then
-            echo "SPX datasets are already current."
+            data/fear_greed_spx_daily.csv \
+            data/signal_ledger.csv)" ]; then
+            echo "Datasets and signal ledger are already current."
             exit 0
           fi
 
@@ -80,13 +90,14 @@ jobs:
 
           git add \
             data/spx_daily.csv \
-            data/fear_greed_spx_daily.csv
+            data/fear_greed_spx_daily.csv \
+            data/signal_ledger.csv
 
           if git diff --cached --quiet; then
-            echo "No staged dataset changes to commit."
+            echo "No staged changes to commit."
             exit 0
           fi
 
-          git commit -m "Update Fear and Greed SPX dataset"
+          git commit -m "Update market data and signal ledger"
           git pull --rebase origin main
           git push origin HEAD:main

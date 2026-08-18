@@ -2,7 +2,13 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+feargreed_env/
 .env
 .DS_Store
+
 site/*
 !site/.gitkeep
+
+reports/*.csv
+reports/*.json
+!reports/.gitkeep
