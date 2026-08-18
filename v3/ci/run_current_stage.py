@@ -11,23 +11,24 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from v3.models.random_forest import run_candidate  # noqa: E402
+from v3.evaluation.walk_forward import run_common_evaluation  # noqa: E402
 
 
 def main() -> int:
-    report = run_candidate()
-    if report.get("status") != "BENCHMARK_GENERATED":
-        raise SystemExit("V3-008 random forest benchmark did not generate successfully")
-    if int(report.get("prediction_rows", 0)) <= 0:
-        raise SystemExit("V3-008 random forest benchmark generated no predictions")
+    report = run_common_evaluation()
+    if report.get("status") != "COMMON_EVALUATION_COMPLETE":
+        raise SystemExit("V3-009 common evaluation did not complete successfully")
+    if int(report.get("metric_rows", 0)) <= 0:
+        raise SystemExit("V3-009 common evaluation generated no metrics")
     print(
         json.dumps(
             {
-                "stage": "V3-008",
+                "stage": "V3-009",
                 "status": report["status"],
-                "model_name": report["model_name"],
+                "experiments": report["experiments"],
                 "prediction_rows": report["prediction_rows"],
-                "feature_count": report["feature_count"],
+                "metric_rows": report["metric_rows"],
+                "trading_evaluation_status": report["trading_evaluation_status"],
             },
             indent=2,
             sort_keys=True,
