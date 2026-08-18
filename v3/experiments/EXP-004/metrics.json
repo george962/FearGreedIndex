@@ -1,0 +1,22 @@
+{
+  "experiment_id": "EXP-004",
+  "model_name": "random_forest_v1",
+  "prediction_rows": 659,
+  "aggregate_evidence": {
+    "mean_classification_brier": 0.2319690501252159,
+    "mean_classification_log_loss": 0.6622280885549738,
+    "mean_return_mae": 0.032529651839325956,
+    "mean_return_rmse": 0.04122730191533392,
+    "mean_drawdown_20d_mae": 0.021771468289908263,
+    "mean_drawdown_20d_rmse": 0.02834831558669074
+  },
+  "selected_fold_evidence": {
+    "2024_p_up_20d": {"brier_score": 0.21735150217386098, "log_loss": 0.6252589815077602},
+    "2025_p_up_20d": {"brier_score": 0.254799668448583, "log_loss": 0.7188038033428422},
+    "2026_ytd_p_up_60d": {"brier_score": 0.1056589587882742, "log_loss": 0.37188176387808464},
+    "2025_return_60d": {"mae": 0.071627787978825, "rmse": 0.0920079238768192},
+    "2026_ytd_return_60d": {"mae": 0.0399149466586973, "rmse": 0.04878654749877893}
+  },
+  "status": "BENCHMARK_RECORDED",
+  "note": "Fixed random-forest robustness result. Apparent aggregate strength is not a champion decision; full comparison belongs to V3-009/V3-010."
+}
