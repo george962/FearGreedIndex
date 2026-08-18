@@ -57,8 +57,18 @@ def main() -> int:
     if not version:
         raise SystemExit("strategy_manifest.json has no strategy_version")
 
+    config = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
+    if config.get("enable_tactical_sizing") is not False:
+        raise SystemExit(
+            "V3-001 requires the frozen v2.1 benchmark to keep tactical sizing disabled"
+        )
+
     with tempfile.TemporaryDirectory(prefix="feargreed-v2_1-") as temp_dir:
         temp = Path(temp_dir)
+
+        # This is a benchmark capture, not a promotion gate. A frozen benchmark
+        # must be recorded even if an existing v2.1 acceptance threshold reports
+        # REVIEW/FAIL, so intentionally do not pass --strict here.
         run([
             sys.executable,
             "scripts/strategy_validation.py",
@@ -98,10 +108,10 @@ def main() -> int:
             "strategy_version": version,
             "dataset_start": backtest_summary.get("start"),
             "dataset_end": backtest_summary.get("end"),
+            "tactical_sizing_enabled": False,
             "runtime_sha256": file_hashes,
             "input_sha256": input_hashes,
             "report_sha256": report_hashes,
-            "tactical_sizing_policy": "as frozen in config.json; v3 must not retune v2.1",
             "generation_command": "python v3/baseline/freeze_v2_1.py",
         }
         (args.output_dir / "manifest.json").write_text(
@@ -116,6 +126,8 @@ def main() -> int:
             "It is generated exclusively from checked-in data using the frozen v2.1 runtime.\n\n"
             f"Evaluation coverage: `{backtest_summary.get('start')}` through "
             f"`{backtest_summary.get('end')}`.\n\n"
+            "Tactical sizing is explicitly required to remain disabled while this "
+            "benchmark is generated.\n\n"
             "## Reproduce\n\n```bash\npython v3/baseline/freeze_v2_1.py\n```\n\n"
             "The hashes in `manifest.json` identify the exact runtime, inputs, and reports. "
             "Any methodology change belongs in v3 rather than changing this benchmark.\n"
