@@ -4,8 +4,14 @@
 from __future__ import annotations
 
 import json
+import sys
+from pathlib import Path
 
-from v3.models.logistic_baseline import run_baseline
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from v3.models.logistic_baseline import run_baseline  # noqa: E402
 
 
 def main() -> int:
