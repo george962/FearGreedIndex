@@ -184,6 +184,10 @@ def build_feature_frame(fear_greed: pd.DataFrame, market: pd.DataFrame) -> pd.Da
         frame["fg_change_5"] * frame["spx_return_5"]
     )
 
+    # Keep the market-history warmup for rolling calculations, but do not emit
+    # decision rows before the first available Fear & Greed observation.
+    frame = frame.loc[frame["fear_greed_date"].notna()].copy()
+
     metadata_columns = [
         "decision_date",
         "fear_greed_date",
