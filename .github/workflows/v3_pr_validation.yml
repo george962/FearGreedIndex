@@ -55,6 +55,9 @@ jobs:
       - name: Freeze v2.1 baseline for v3 comparison
         run: python v3/baseline/freeze_v2_1.py
 
+      - name: Verify frozen baseline is reproducible
+        run: git diff --exit-code -- reports/baseline_v2_1/
+
       - name: Upload v3 foundation evidence
         if: always()
         uses: actions/upload-artifact@v4
