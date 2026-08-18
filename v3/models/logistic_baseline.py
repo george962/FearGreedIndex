@@ -167,7 +167,7 @@ def summarize_fold(
     fold: dict[str, Any],
     training_rows: dict[int, int],
 ) -> list[dict[str, Any]]:
-    source = frame.set_index("decision_date", drop=False)
+    source = frame
     rows: list[dict[str, Any]] = []
     for horizon in HORIZONS:
         probability_column = f"predicted_p_up_{horizon}d"
