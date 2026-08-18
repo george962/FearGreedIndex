@@ -1,313 +1,323 @@
 #!/usr/bin/env python3
-"""
-backtest.py
-
-Backtests the Fear & Greed threshold strategy (buy when the index is low,
-trim when it's high) against real price history for a target ticker
-(default TQQQ), and compares it against two baselines:
-
-  1. "All days"   - the average forward return starting from ANY trading
-                     day in the sample (i.e. what you'd expect by chance).
-  2. "Monthly DCA" - the average forward return starting from a fixed,
-                     signal-blind monthly buy schedule.
-
-This answers the question the rest of the repo can't currently answer:
-does buying when the Fear & Greed Index is low actually beat doing nothing
-special, for this specific ticker?
-
-Usage:
-    python backtest.py
-    python backtest.py --ticker TQQQ --low 25 --high 75
-    python backtest.py --price-csv data/tqqq_prices.csv
-    python backtest.py --output data/backtest_signals.csv
-
-Price data:
-    By default this tries to fetch daily prices with yfinance. If yfinance
-    isn't installed, can't reach the network (e.g. inside some CI/sandbox
-    environments), or you'd rather supply your own data, pass
-    --price-csv PATH to a CSV with at least "Date" and "Close" columns.
-
-Exit codes:
-    0: success
-    1: data loading or fetch failure
-    2: invalid command-line values
-"""
+"""Unified backtest using the exact same point-in-time engine as the dashboard."""
 
 from __future__ import annotations
 
 import argparse
+import json
+import math
 import sys
-from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
-DEFAULT_FG_CSV = "data/fear_greed_daily.csv"
-DEFAULT_TICKER = "TQQQ"
-DEFAULT_LOW = 25
-DEFAULT_HIGH = 75
-DEFAULT_HORIZONS = [5, 20, 60]  # trading days ~ 1wk, 4wk, 12wk
+ROOT = Path(__file__).resolve().parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.research_common import (  # noqa: E402
+    load_context,
+    read_json,
+    replay_with_outcomes,
+    strategy_version,
+)
 
 
-@dataclass
-class BacktestResult:
-    horizon_days: int
-    signal_count: int
-    signal_mean_return: float
-    signal_win_rate: float
-    all_days_mean_return: float
-    monthly_dca_mean_return: float
-
-
-def load_fear_greed(path: str) -> pd.DataFrame:
-    """Load the repo's daily Fear & Greed CSV (Date, Value, Rating, ...)."""
-    df = pd.read_csv(path)
-    if "Date" not in df.columns or "Value" not in df.columns:
-        raise ValueError(
-            f"{path} must contain at least 'Date' and 'Value' columns, "
-            f"found: {list(df.columns)}"
-        )
-    df["Date"] = pd.to_datetime(df["Date"])
-    df = df.sort_values("Date").reset_index(drop=True)
-    return df[["Date", "Value"]]
-
-
-def load_prices_from_csv(path: str) -> pd.DataFrame:
-    df = pd.read_csv(path)
-    date_col = "Date" if "Date" in df.columns else df.columns[0]
-    close_col = "Close" if "Close" in df.columns else df.columns[-1]
-    df = df[[date_col, close_col]].rename(columns={date_col: "Date", close_col: "Close"})
-    df["Date"] = pd.to_datetime(df["Date"])
-    df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
-    df = df.dropna(subset=["Close"]).sort_values("Date").reset_index(drop=True)
-    return df
-
-
-def load_prices_from_yfinance(ticker: str, start: str, end: str) -> pd.DataFrame:
-    try:
-        import yfinance as yf
-    except ImportError as exc:
-        raise RuntimeError(
-            "yfinance is not installed. Run 'pip install yfinance' or pass "
-            "--price-csv with your own price data."
-        ) from exc
-
-    data = yf.download(ticker, start=start, end=end, progress=False, auto_adjust=True)
-    if data.empty:
-        raise RuntimeError(
-            f"yfinance returned no data for {ticker} between {start} and {end}. "
-            "Check the ticker symbol, your network connection, or supply "
-            "--price-csv instead."
-        )
-    data = data.reset_index()
-    if isinstance(data.columns, pd.MultiIndex):
-        data.columns = [c[0] for c in data.columns]
-    df = data[["Date", "Close"]].copy()
-    df["Date"] = pd.to_datetime(df["Date"])
-    return df
-
-
-def merge_signal_and_price(fg: pd.DataFrame, price: pd.DataFrame) -> pd.DataFrame:
-    """Align Fear & Greed readings to the nearest trading day's close."""
-    price = price.sort_values("Date")
-    fg = fg.sort_values("Date")
-    merged = pd.merge_asof(fg, price, on="Date", direction="forward")
-    merged = merged.dropna(subset=["Close"]).reset_index(drop=True)
-    return merged
-
-
-def forward_return(price: pd.DataFrame, start_idx: int, horizon_days: int) -> float | None:
-    end_idx = start_idx + horizon_days
-    if end_idx >= len(price):
-        return None
-    start_price = price.iloc[start_idx]["Close"]
-    end_price = price.iloc[end_idx]["Close"]
-    if start_price <= 0:
-        return None
-    return (end_price / start_price) - 1.0
-
-
-def compute_baselines(price: pd.DataFrame, horizons: list[int]) -> dict[int, dict[str, float]]:
-    """All-days average return and monthly-DCA average return, per horizon."""
-    price = price.reset_index(drop=True)
-    price["_month"] = price["Date"].dt.to_period("M")
-    monthly_idx = price.groupby("_month").head(1).index.tolist()
-
-    baselines: dict[int, dict[str, float]] = {}
-    for h in horizons:
-        all_rets = [
-            forward_return(price, i, h)
-            for i in range(len(price))
-            if forward_return(price, i, h) is not None
-        ]
-        dca_rets = [
-            forward_return(price, i, h)
-            for i in monthly_idx
-            if forward_return(price, i, h) is not None
-        ]
-        baselines[h] = {
-            "all_days_mean": float(np.mean(all_rets)) if all_rets else float("nan"),
-            "monthly_dca_mean": float(np.mean(dca_rets)) if dca_rets else float("nan"),
-        }
-    return baselines
-
-
-def run_backtest(
-    merged: pd.DataFrame,
-    price: pd.DataFrame,
-    low: float,
-    high: float,
-    horizons: list[int],
-) -> tuple[list[BacktestResult], list[BacktestResult], pd.DataFrame]:
-    """Run buy-signal (low) and trim-signal (high) analysis."""
-    price = price.reset_index(drop=True)
-    price_index_by_date = {d: i for i, d in enumerate(price["Date"])}
-
-    baselines = compute_baselines(price, horizons)
-
-    def analyze(signal_mask: pd.Series) -> tuple[list[BacktestResult], pd.DataFrame]:
-        rows = []
-        results = []
-        signal_dates = merged.loc[signal_mask, "Date"]
-        for h in horizons:
-            rets = []
-            for d in signal_dates:
-                idx = price_index_by_date.get(d)
-                if idx is None:
-                    continue
-                r = forward_return(price, idx, h)
-                if r is not None:
-                    rets.append(r)
-                    if h == horizons[0]:
-                        rows.append({"Date": d, "FG_Value": merged.loc[merged["Date"] == d, "Value"].iloc[0]})
-            mean_ret = float(np.mean(rets)) if rets else float("nan")
-            win_rate = float(np.mean([r > 0 for r in rets])) if rets else float("nan")
-            results.append(
-                BacktestResult(
-                    horizon_days=h,
-                    signal_count=len(rets),
-                    signal_mean_return=mean_ret,
-                    signal_win_rate=win_rate,
-                    all_days_mean_return=baselines[h]["all_days_mean"],
-                    monthly_dca_mean_return=baselines[h]["monthly_dca_mean"],
-                )
-            )
-        log_df = pd.DataFrame(rows).drop_duplicates(subset="Date") if rows else pd.DataFrame(columns=["Date", "FG_Value"])
-        return results, log_df
-
-    buy_results, buy_log = analyze(merged["Value"] <= low)
-    sell_results, sell_log = analyze(merged["Value"] >= high)
-
-    buy_log["signal"] = "buy (low fear/greed)"
-    sell_log["signal"] = "trim (high fear/greed)"
-    combined_log = pd.concat([buy_log, sell_log], ignore_index=True).sort_values("Date")
-
-    return buy_results, sell_results, combined_log
-
-
-def print_report(ticker: str, low: float, high: float, buy_results, sell_results) -> None:
-    horizon_labels = {5: "1 week", 20: "1 month", 60: "~1 quarter"}
-
-    def fmt_pct(x: float) -> str:
-        return "n/a" if x != x else f"{x * 100:+.2f}%"
-
-    print(f"\nBacktest: {ticker} vs Fear & Greed Index (low<={low}, high>={high})")
-    print("=" * 72)
-
-    print(f"\nBUY SIGNAL  (Fear & Greed <= {low})")
-    print(f"{'Horizon':<12}{'Signals':<10}{'Win rate':<12}{'Signal avg':<14}{'All-days avg':<14}{'Monthly DCA avg'}")
-    for r in buy_results:
-        label = horizon_labels.get(r.horizon_days, f"{r.horizon_days}d")
-        win = "n/a" if r.signal_win_rate != r.signal_win_rate else f"{r.signal_win_rate * 100:.0f}%"
-        print(
-            f"{label:<12}{r.signal_count:<10}{win:<12}{fmt_pct(r.signal_mean_return):<14}"
-            f"{fmt_pct(r.all_days_mean_return):<14}{fmt_pct(r.monthly_dca_mean_return)}"
-        )
-
-    print(f"\nTRIM SIGNAL (Fear & Greed >= {high})")
-    print(f"{'Horizon':<12}{'Signals':<10}{'Win rate':<12}{'Signal avg':<14}{'All-days avg':<14}{'Monthly DCA avg'}")
-    for r in sell_results:
-        label = horizon_labels.get(r.horizon_days, f"{r.horizon_days}d")
-        win = "n/a" if r.signal_win_rate != r.signal_win_rate else f"{r.signal_win_rate * 100:.0f}%"
-        print(
-            f"{label:<12}{r.signal_count:<10}{win:<12}{fmt_pct(r.signal_mean_return):<14}"
-            f"{fmt_pct(r.all_days_mean_return):<14}{fmt_pct(r.monthly_dca_mean_return)}"
-        )
-
-    print(
-        "\nRead this as: does 'Signal avg' meaningfully beat 'All-days avg' and "
-        "'Monthly DCA avg'? If it doesn't, the threshold isn't adding value over "
-        "buying on a fixed schedule or a random day for this ticker/period.\n"
-        "This is historical only and not a guarantee of future results.\n"
-    )
-
-
-def parse_args(argv=None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Backtest the Fear & Greed strategy against price history.")
-    parser.add_argument("--fg-csv", default=DEFAULT_FG_CSV, help=f"Path to Fear & Greed CSV (default: {DEFAULT_FG_CSV})")
-    parser.add_argument("--ticker", default=DEFAULT_TICKER, help=f"Ticker to fetch via yfinance (default: {DEFAULT_TICKER})")
-    parser.add_argument("--price-csv", default=None, help="Use a local price CSV instead of fetching via yfinance")
-    parser.add_argument("--low", type=float, default=DEFAULT_LOW, help=f"Low (buy) threshold (default: {DEFAULT_LOW})")
-    parser.add_argument("--high", type=float, default=DEFAULT_HIGH, help=f"High (trim) threshold (default: {DEFAULT_HIGH})")
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", type=Path, default=ROOT / "config.json")
     parser.add_argument(
-        "--horizons",
-        default=",".join(str(h) for h in DEFAULT_HORIZONS),
-        help="Comma-separated forward-looking horizons in trading days (default: 5,20,60)",
+        "--manifest",
+        type=Path,
+        default=ROOT / "strategy_manifest.json",
     )
-    parser.add_argument("--output", default=None, help="Optional path to write the individual signal log as CSV")
-    args = parser.parse_args(argv)
-
-    if not (0 <= args.low < args.high <= 100):
-        parser.error("--low must be < --high, and both must be between 0 and 100")
-
-    try:
-        args.horizons = [int(h) for h in args.horizons.split(",") if h.strip()]
-    except ValueError:
-        parser.error("--horizons must be a comma-separated list of integers, e.g. 5,20,60")
-    if not args.horizons:
-        parser.error("--horizons must contain at least one value")
-
-    return args
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=ROOT / "reports",
+    )
+    parser.add_argument("--start")
+    parser.add_argument("--end")
+    parser.add_argument("--skip-yahoo-fallback", action="store_true")
+    parser.add_argument("--progress-every", type=int, default=100)
+    return parser.parse_args()
 
 
-def main(argv=None) -> int:
-    args = parse_args(argv)
+def decision_exposure(
+    row: pd.Series,
+    settings: dict[str, Any],
+) -> float:
+    exposure = float(settings.get("baseline_exposure", 1.0))
+    action = str(row.get("action", ""))
+    tier = str(row.get("sizing_tier", ""))
+    timing = str(row.get("timing_action", ""))
 
-    try:
-        fg = load_fear_greed(args.fg_csv)
-    except (FileNotFoundError, ValueError) as exc:
-        print(f"Error loading Fear & Greed data: {exc}", file=sys.stderr)
-        return 1
-
-    try:
-        if args.price_csv:
-            price = load_prices_from_csv(args.price_csv)
+    if action == "BUY GRADUALLY":
+        if "Elevated" in tier:
+            exposure = float(
+                settings.get("buy_elevated_exposure", 1.25)
+            )
         else:
-            start = fg["Date"].min().strftime("%Y-%m-%d")
-            end = fg["Date"].max().strftime("%Y-%m-%d")
-            price = load_prices_from_yfinance(args.ticker, start, end)
-    except (FileNotFoundError, RuntimeError) as exc:
-        print(f"Error loading price data: {exc}", file=sys.stderr)
-        return 1
+            exposure = float(
+                settings.get("buy_modest_exposure", 1.15)
+            )
+    elif action == "WAIT ON BUYING":
+        exposure = float(settings.get("wait_exposure", 0.75))
 
-    if price.empty:
-        print("Error: price data is empty.", file=sys.stderr)
-        return 1
+    if timing.startswith("EARLY BUY — FIRST TRANCHE"):
+        exposure = max(
+            exposure,
+            float(
+                settings.get(
+                    "early_buy_first_tranche_exposure",
+                    1.20,
+                )
+            ),
+        )
+    elif timing.startswith("EARLY BUY — SMALL START"):
+        exposure = max(
+            exposure,
+            float(settings.get("early_buy_small_exposure", 1.10)),
+        )
+    elif timing.startswith("EARLY TRIM"):
+        if "STRONG" in timing:
+            exposure = min(
+                exposure,
+                float(settings.get("early_trim_strong_exposure", 0.80)),
+            )
+        else:
+            exposure = min(
+                exposure,
+                float(settings.get("early_trim_exposure", 0.90)),
+            )
 
-    merged = merge_signal_and_price(fg, price)
-    if merged.empty:
-        print("Error: no overlapping dates between Fear & Greed data and price data.", file=sys.stderr)
-        return 1
+    lower = float(settings.get("minimum_exposure", 0.50))
+    upper = float(settings.get("maximum_exposure", 1.35))
+    return float(np.clip(exposure, lower, upper))
 
-    buy_results, sell_results, log_df = run_backtest(merged, price, args.low, args.high, args.horizons)
-    print_report(args.ticker, args.low, args.high, buy_results, sell_results)
 
-    if args.output:
-        log_df.to_csv(args.output, index=False)
-        print(f"Signal log written to {args.output} ({len(log_df)} rows)")
+def build_daily_backtest(
+    market: pd.DataFrame,
+    decisions: pd.DataFrame,
+    settings: dict[str, Any],
+) -> pd.DataFrame:
+    frame = market[["close"]].copy().sort_index()
+    frame["market_return"] = frame["close"].pct_change().fillna(0.0)
 
+    usable = decisions.copy()
+    usable["entry_date"] = pd.to_datetime(
+        usable["entry_date"],
+        errors="coerce",
+    )
+    usable = usable.dropna(subset=["entry_date"]).sort_values("entry_date")
+    usable["target_exposure"] = usable.apply(
+        lambda row: decision_exposure(row, settings),
+        axis=1,
+    )
+
+    exposure_changes = (
+        usable.groupby("entry_date")["target_exposure"].last()
+    )
+    frame["exposure"] = exposure_changes.reindex(frame.index)
+    frame["exposure"] = frame["exposure"].ffill().fillna(
+        float(settings.get("baseline_exposure", 1.0))
+    )
+
+    frame["turnover"] = frame["exposure"].diff().abs().fillna(0.0)
+    cost_bps = float(
+        settings.get("transaction_cost_bps_per_1x_turnover", 2.0)
+    )
+    frame["transaction_cost"] = (
+        frame["turnover"] * cost_bps / 10000.0
+    )
+    frame["strategy_return"] = (
+        frame["exposure"] * frame["market_return"]
+        - frame["transaction_cost"]
+    )
+    frame["strategy_equity"] = (1.0 + frame["strategy_return"]).cumprod()
+    frame["benchmark_equity"] = (1.0 + frame["market_return"]).cumprod()
+    return frame
+
+
+def max_drawdown(equity: pd.Series) -> float:
+    running_high = equity.cummax()
+    drawdown = equity / running_high - 1.0
+    return float(drawdown.min())
+
+
+def annualized_return(returns: pd.Series) -> float:
+    if returns.empty:
+        return math.nan
+    total = float((1.0 + returns).prod())
+    years = len(returns) / 252.0
+    if years <= 0 or total <= 0:
+        return math.nan
+    return float(total ** (1.0 / years) - 1.0)
+
+
+def performance_metrics(
+    frame: pd.DataFrame,
+    return_column: str,
+    equity_column: str,
+) -> dict[str, float]:
+    returns = pd.to_numeric(frame[return_column], errors="coerce").dropna()
+    equity = pd.to_numeric(frame[equity_column], errors="coerce").dropna()
+
+    ann_return = annualized_return(returns)
+    ann_vol = float(returns.std(ddof=1) * math.sqrt(252))
+    sharpe = (
+        float(returns.mean() / returns.std(ddof=1) * math.sqrt(252))
+        if returns.std(ddof=1) > 0
+        else math.nan
+    )
+    downside = returns[returns < 0]
+    downside_std = downside.std(ddof=1)
+    sortino = (
+        float(returns.mean() / downside_std * math.sqrt(252))
+        if pd.notna(downside_std) and downside_std > 0
+        else math.nan
+    )
+    drawdown = max_drawdown(equity)
+    calmar = (
+        float(ann_return / abs(drawdown))
+        if math.isfinite(ann_return) and drawdown < 0
+        else math.nan
+    )
+    return {
+        "total_return": float(equity.iloc[-1] - 1.0),
+        "annualized_return": ann_return,
+        "annualized_volatility": ann_vol,
+        "sharpe_0rf": sharpe,
+        "sortino_0rf": sortino,
+        "max_drawdown": drawdown,
+        "calmar": calmar,
+    }
+
+
+def action_scorecard(decisions: pd.DataFrame) -> pd.DataFrame:
+    usable = decisions[
+        pd.to_numeric(decisions["forward_5d"], errors="coerce").notna()
+    ].copy()
+    usable["forward_5d"] = pd.to_numeric(
+        usable["forward_5d"],
+        errors="coerce",
+    )
+    usable["forward_20d"] = pd.to_numeric(
+        usable["forward_20d"],
+        errors="coerce",
+    )
+
+    rows = []
+    for action, frame in usable.groupby("action"):
+        rows.append(
+            {
+                "action": action,
+                "observations": len(frame),
+                "win_rate_5d": float((frame["forward_5d"] > 0).mean()),
+                "average_5d": float(frame["forward_5d"].mean()),
+                "median_5d": float(frame["forward_5d"].median()),
+                "average_20d": float(frame["forward_20d"].mean()),
+            }
+        )
+    return pd.DataFrame(rows).sort_values("action")
+
+
+def main() -> int:
+    args = parse_args()
+    raw_config = read_json(args.config)
+    overlay_settings = raw_config.get("portfolio_backtest", {})
+
+    context = load_context(
+        args.config,
+        allow_yahoo=not args.skip_yahoo_fallback,
+    )
+    decisions = replay_with_outcomes(
+        context,
+        progress_every=args.progress_every,
+    )
+    daily = build_daily_backtest(
+        context.market,
+        decisions,
+        overlay_settings,
+    )
+
+    if args.start:
+        daily = daily.loc[daily.index >= pd.Timestamp(args.start)]
+    if args.end:
+        daily = daily.loc[daily.index <= pd.Timestamp(args.end)]
+
+    if daily.empty:
+        raise SystemExit("No market rows remain after date filtering")
+
+    strategy = performance_metrics(
+        daily,
+        "strategy_return",
+        "strategy_equity",
+    )
+    benchmark = performance_metrics(
+        daily,
+        "market_return",
+        "benchmark_equity",
+    )
+
+    summary = {
+        "strategy_version": strategy_version(args.manifest),
+        "data_source": context.data_source,
+        "start": daily.index.min().date().isoformat(),
+        "end": daily.index.max().date().isoformat(),
+        "strategy": strategy,
+        "benchmark": benchmark,
+        "annualized_return_difference": (
+            strategy["annualized_return"]
+            - benchmark["annualized_return"]
+        ),
+        "max_drawdown_difference": (
+            strategy["max_drawdown"]
+            - benchmark["max_drawdown"]
+        ),
+        "average_exposure": float(daily["exposure"].mean()),
+        "maximum_exposure": float(daily["exposure"].max()),
+        "minimum_exposure": float(daily["exposure"].min()),
+        "total_turnover": float(daily["turnover"].sum()),
+        "assumptions": {
+            "cash_return": 0.0,
+            "borrowing_cost": 0.0,
+            "transaction_cost_bps_per_1x_turnover": float(
+                overlay_settings.get(
+                    "transaction_cost_bps_per_1x_turnover",
+                    2.0,
+                )
+            ),
+            "note": (
+                "This is a diagnostic exposure-overlay backtest. "
+                "It is not a brokerage fill simulator."
+            ),
+        },
+    }
+
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    daily_path = args.output_dir / "backtest_daily.csv"
+    decision_path = args.output_dir / "decision_outcomes.csv"
+    scorecard_path = args.output_dir / "action_scorecard.csv"
+    summary_path = args.output_dir / "backtest_summary.json"
+
+    daily.to_csv(daily_path)
+    decisions.to_csv(decision_path, index=False)
+    action_scorecard(decisions).to_csv(scorecard_path, index=False)
+    summary_path.write_text(
+        json.dumps(summary, indent=2, allow_nan=False),
+        encoding="utf-8",
+    )
+
+    print(json.dumps(summary, indent=2, allow_nan=False))
+    print(f"\nWrote {daily_path}")
+    print(f"Wrote {decision_path}")
+    print(f"Wrote {scorecard_path}")
+    print(f"Wrote {summary_path}")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

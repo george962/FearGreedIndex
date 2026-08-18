@@ -1,0 +1,14 @@
+{
+  "strategy_version": "feargreed-v2.0.0",
+  "frozen_at_utc": "2026-08-18T20:52:00Z",
+  "decision_engine": "scripts/build_dashboard.py",
+  "primary_validation_horizon_sessions": 5,
+  "intended_use": "Tactical allocation decision support. The engine may change the size or timing of discretionary additions; it is not an automatic brokerage execution system.",
+  "freeze_policy": "Any change to decision thresholds, analog matching, regime definitions, sizing rules, timing scores, confirmation rules, or validation methodology requires a new strategy_version. Historical results for prior versions must remain preserved.",
+  "notes": [
+    "The dashboard decision engine remains the single source of truth.",
+    "backtest.py, walk-forward validation, and the signal ledger call the same engine.",
+    "Walk-forward calibration uses only observations available before each test period.",
+    "The live signal ledger never overwrites a prior prediction; changed predictions become new immutable revisions."
+  ]
+}
