@@ -1,0 +1,30 @@
+{
+  "dataset_end": "2026-08-18",
+  "dataset_start": "2021-02-02",
+  "generation_command": "python v3/baseline/freeze_v2_1.py",
+  "generator_sha256": "cbc38910b071a9fb3e0c1782217503766453df00b7355e33decf1a5c0d266dbb",
+  "historical_decision_rows": 1391,
+  "input_sha256": {
+    "data/fear_greed_daily.csv": "0f804d5017fa909e0f5449a0de7f7474ccbd19e48e01bd4e227451362c58ad82",
+    "data/spx_daily.csv": "74837eda7d4f9b38dad56e05f097fb04a693df9be7e3dbde2fb7176e00a3bca0"
+  },
+  "report_sha256": {
+    "action_scorecard.csv": "4c59932f64514a2d6d84fc492ef3fedd5354bda95a3748a775c6477ca31bdd0d",
+    "backtest_summary.json": "db1b1d00f167fbb191984ee135854b3ab72d53979a5b2edc57cd263840708949",
+    "walk_forward_summary.csv": "e3651c994a87ea964b6daaac317cad4b9564e741a928720d404d26be999072e6"
+  },
+  "runtime_sha256": {
+    "FearGreed.py": "f2e8d349a63c6345c361e070338139fe3acf506598acfeec4334233993f655a2",
+    "FearGreedHistory.py": "05bbd80e81d996ad68fa02d3170ebcdf1131aeb12245c5848019a32d47ed2bc3",
+    "FearGreedMarketData.py": "20ea82559a79a2d74e0385d2165972e25a26a18be29bb1df04311a95d2140ad8",
+    "backtest.py": "149c065fa42b3fde6d33d293f15e382dc852a190a3baee6f7a8defbddaa8cba4",
+    "config.json": "a3d61d4eb6bf0bea0a4e72fff6e82c5cfca07df7b26dfa94976b5da88c4eccac",
+    "scripts/build_dashboard.py": "2795f134977fb1cc69a3603e0a352a96cf4b07704ea0b2c6d2e10a1d30bd6851",
+    "scripts/research_common.py": "159420fd230a6ffccd69214a323857659abb3f94835982fabef989412d3f31a5",
+    "scripts/strategy_validation.py": "a3b32b365210da1fc80bf57fa2a8940ff842194f2693b9fc3e07508b58da44a0",
+    "strategy_manifest.json": "615893b342ab7217917cf7cb4ecc912dcef783a23a66818271b9e4a5b58443d0"
+  },
+  "strategy_version": "feargreed-v2.1.0",
+  "tactical_sizing_enabled": false,
+  "walk_forward_all_folds_pass": false
+}
