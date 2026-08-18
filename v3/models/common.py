@@ -34,6 +34,7 @@ def load_model_dataset(path: Path = DEFAULT_MODEL_DATASET) -> pd.DataFrame:
     for horizon in HORIZONS:
         required.update(
             {
+                f"forward_return_{horizon}d",
                 f"forward_positive_{horizon}d",
                 f"_forward_{horizon}d_known_date",
             }
@@ -67,20 +68,25 @@ def eligible_training_mask(
     frame: pd.DataFrame,
     horizon: int,
     cutoff: pd.Timestamp | str,
+    target_column: str | None = None,
 ) -> pd.Series:
     """Rows legally trainable at a chronological cutoff.
 
-    A row is eligible only when both the decision and the outcome-known date are
-    on or before the training cutoff. This is stricter than filtering by the
-    decision date alone and prevents partially matured labels from leaking into
-    training.
+    A row is eligible only when both the decision and the horizon's outcome-known
+    date are on or before the training cutoff. ``target_column`` lets every model
+    family apply the same maturity rule to its own target. The default preserves
+    the V3-005 positive-return classification contract.
     """
 
     if horizon not in HORIZONS:
         raise ValueError(f"Unsupported horizon: {horizon}")
     cutoff_ts = pd.Timestamp(cutoff).normalize()
-    target = f"forward_positive_{horizon}d"
+    target = target_column or f"forward_positive_{horizon}d"
     known = f"_forward_{horizon}d_known_date"
+    if target not in frame.columns:
+        raise ValueError(f"Missing target column: {target}")
+    if known not in frame.columns:
+        raise ValueError(f"Missing outcome-known column: {known}")
     return (
         frame["decision_date"].le(cutoff_ts)
         & frame[known].notna()
