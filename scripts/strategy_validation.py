@@ -193,7 +193,16 @@ def evaluate_fold(
     test_start = pd.Timestamp(fold["test_start"])
     test_end = pd.Timestamp(fold["test_end"])
 
-    train = history.loc[dates <= train_end].copy()
+    # A decision dated on or before train_end is not necessarily a valid
+    # training observation: its forward return can mature in the test period.
+    # Gate training rows by the date the target was actually knowable.
+    if "_forward_5d_known_date" not in history:
+        raise ValueError(
+            "History is missing _forward_5d_known_date; validation must gate "
+            "training rows by outcome availability, not decision date."
+        )
+    known_5d = pd.to_datetime(history["_forward_5d_known_date"], errors="coerce")
+    train = history.loc[known_5d.notna() & known_5d.le(train_end)].copy()
     test = history.loc[(dates >= test_start) & (dates <= test_end)].copy()
     test = test[pd.to_numeric(test["forward_5d"], errors="coerce").notna()].copy()
 

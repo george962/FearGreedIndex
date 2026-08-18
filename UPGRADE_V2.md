@@ -6,14 +6,14 @@ It does **not** replace `scripts/build_dashboard.py`. That file remains the deci
 engine and therefore the single source of truth for the dashboard, backtest,
 walk-forward validation, and live signal ledger.
 
-## Replace these existing files
+## Implemented replacements
 
 - `backtest.py`
 - `config.json`
 - `.gitignore`
 - `.github/workflows/market_data.yml`
 
-## Add these new files
+## Implemented additions
 
 - `strategy_manifest.json`
 - `scripts/research_common.py`
@@ -23,13 +23,13 @@ walk-forward validation, and live signal ledger.
 - `test_signal_ledger.py`
 - `.github/workflows/strategy_validation.yml`
 
-## Delete this committed directory
+## Local environment cleanup
 
 ```bash
-git rm -r feargreed_env
+rm -rf feargreed_env
 ```
 
-The replacement `.gitignore` prevents it from being committed again.
+The directory is no longer tracked, and `.gitignore` prevents it from being committed again.
 
 ## Local validation
 

@@ -179,6 +179,7 @@ class Settings:
     sizing_modest_buy_low_pct: int = 110
     sizing_modest_buy_high_pct: int = 125
     sizing_strong_buy_min_checks_ratio: float = 0.8
+    enable_tactical_sizing: bool = False
 
     # Fast timing layer. This layer intentionally reacts before the slower
     # analog/bootstrap confirmation model. It uses only information available
@@ -1574,6 +1575,20 @@ class PositionGuidance:
 
 def build_position_guidance(verdict: Verdict, settings: Settings) -> PositionGuidance:
     """Translate the verdict into the dashboard's rule-based sizing suggestion."""
+    if not settings.enable_tactical_sizing:
+        return PositionGuidance(
+            tier="Tactical sizing not activated",
+            sizing_label="Baseline allocation: 1.00x · Tactical allocation: 0.00x",
+            sizing_detail=(
+                "The signal remains visible for research, but it has not yet earned "
+                "the right to change position size on genuinely unseen data."
+            ),
+            guardrail=(
+                "Activation requires the frozen validation gates and an untouched "
+                "live ledger; do not infer a 1.25x or 1.50x size from the rule score."
+            ),
+        )
+
     checks_ratio = (
         verdict.positive_checks_passed / verdict.positive_checks_total
         if verdict.positive_checks_total
@@ -3150,6 +3165,20 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
     completed_5d = int(events["forward_5d"].notna().sum())
 
     warnings: list[str] = []
+    signal_age_days = max(
+        0,
+        (generated.date() - pd.Timestamp(current["signal_date"]).date()).days,
+    )
+    if signal_age_days > 4:
+        warnings.append(
+            f"The latest sentiment observation is {signal_age_days} calendar days old. "
+            "Treat all actions as stale until the data pipeline refreshes."
+        )
+    if not settings.enable_tactical_sizing:
+        warnings.append(
+            "Tactical position sizing is disabled pending genuinely unseen validation; "
+            "the dashboard reports research signals with a 1.00x baseline only."
+        )
     if large_gap_count:
         warnings.append(
             f"Sentiment history has {large_gap_count} gap(s) longer than seven days."
@@ -3342,6 +3371,7 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
             "daily_observations": int(len(daily)),
             "completed_5d_outcomes": completed_5d,
             "gaps_over_7_days": large_gap_count,
+            "signal_data_age_days": signal_age_days,
         },
         "latest": {
             "signal_date": pd.Timestamp(current["signal_date"]).date().isoformat(),

@@ -12,10 +12,11 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 import certifi
+
+from http_retry import fetch_json_with_retry
 
 
 HISTORY_BASE_URL = (
@@ -139,31 +140,19 @@ def normalize_rating(value: Any, score: float) -> str:
 def fetch_payload(
     start_date: date,
     timeout: int,
+    attempts: int = 4,
 ) -> dict[str, Any]:
     """Fetch CNN's historical Fear & Greed JSON payload."""
     url = f"{HISTORY_BASE_URL}/{start_date.isoformat()}"
     request = Request(url, headers=HEADERS)
     ssl_context = ssl.create_default_context(cafile=certifi.where())
 
-    try:
-        with urlopen(
-            request,
-            timeout=timeout,
-            context=ssl_context,
-        ) as response:
-            payload = json.load(response)
-    except HTTPError as error:
-        raise RuntimeError(
-            f"CNN returned HTTP {error.code} ({error.reason})"
-        ) from error
-    except URLError as error:
-        raise RuntimeError(
-            f"Could not reach CNN: {error.reason}"
-        ) from error
-    except json.JSONDecodeError as error:
-        raise RuntimeError(
-            "CNN returned invalid JSON"
-        ) from error
+    payload = fetch_json_with_retry(
+        request,
+        timeout=timeout,
+        context=ssl_context,
+        attempts=attempts,
+    )
 
     if not isinstance(payload, dict):
         raise RuntimeError("CNN returned an unexpected payload")

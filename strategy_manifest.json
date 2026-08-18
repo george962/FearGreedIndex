@@ -1,14 +1,18 @@
 {
-  "strategy_version": "feargreed-v2.0.0",
+  "strategy_version": "feargreed-v2.1.0",
   "frozen_at_utc": "2026-08-18T20:52:00Z",
   "decision_engine": "scripts/build_dashboard.py",
   "primary_validation_horizon_sessions": 5,
   "intended_use": "Tactical allocation decision support. The engine may change the size or timing of discretionary additions; it is not an automatic brokerage execution system.",
+  "validation_status": "provisional_retrospective",
+  "sizing_status": "disabled_pending_unseen_validation",
+  "known_limitation": "The current rules were developed with historical 2021-2026 data visible. Anchored replay is leakage-controlled but cannot retroactively make rule selection truly out of sample; the immutable ledger is the clean forward test.",
   "freeze_policy": "Any change to decision thresholds, analog matching, regime definitions, sizing rules, timing scores, confirmation rules, or validation methodology requires a new strategy_version. Historical results for prior versions must remain preserved.",
   "notes": [
     "The dashboard decision engine remains the single source of truth.",
     "backtest.py, walk-forward validation, and the signal ledger call the same engine.",
     "Walk-forward calibration uses only observations available before each test period.",
-    "The live signal ledger never overwrites a prior prediction; changed predictions become new immutable revisions."
+    "The live signal ledger never overwrites a prior prediction; changed predictions become new immutable revisions.",
+    "Version 2.1 gates validation training rows by outcome-known date and aligns exposure changes to the executable next-session open."
   ]
 }

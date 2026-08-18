@@ -95,12 +95,17 @@ def load_context(
 def attach_outcomes(
     history: pd.DataFrame,
     events: pd.DataFrame,
+    market: pd.DataFrame,
 ) -> pd.DataFrame:
     """Attach entry information and realized outcomes to point-in-time decisions."""
     if history.empty:
         return history.copy()
 
-    event_frame = events.copy()
+    event_frame = engine.attach_outcome_known_dates(
+        events,
+        market,
+        horizons=(1, 5, 10, 20, 60),
+    )
     event_frame["decision_date"] = pd.to_datetime(
         event_frame["signal_date"], errors="coerce"
     ).dt.date.astype(str)
@@ -115,6 +120,11 @@ def attach_outcomes(
         "forward_20d",
         "forward_60d",
         "max_drawdown_20d",
+        "_forward_1d_known_date",
+        "_forward_5d_known_date",
+        "_forward_10d_known_date",
+        "_forward_20d_known_date",
+        "_forward_60d_known_date",
     ]
     available = [column for column in wanted if column in event_frame.columns]
     event_frame = event_frame[available].drop_duplicates(
@@ -145,7 +155,7 @@ def replay_with_outcomes(
         context.events,
         progress_every=progress_every,
     )
-    return attach_outcomes(history, context.events)
+    return attach_outcomes(history, context.events, context.market)
 
 
 def current_prediction(

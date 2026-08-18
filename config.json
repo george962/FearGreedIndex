@@ -38,6 +38,7 @@
   "sizing_modest_buy_low_pct": 110,
   "sizing_modest_buy_high_pct": 125,
   "sizing_strong_buy_min_checks_ratio": 0.8,
+  "enable_tactical_sizing": false,
 
   "timing_recent_sentiment_observations": 5,
   "timing_buy_watch_score": 35,
@@ -74,7 +75,7 @@
     "minimum_group_sample": 20,
     "shrinkage_strength": 20.0,
     "minimum_test_rows": 60,
-    "minimum_relative_brier_improvement": 0.0
+    "minimum_relative_brier_improvement": 0.02
   },
 
   "portfolio_backtest": {

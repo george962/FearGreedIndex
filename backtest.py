@@ -126,8 +126,15 @@ def build_daily_backtest(
     decisions: pd.DataFrame,
     settings: dict[str, Any],
 ) -> pd.DataFrame:
-    frame = market[["close"]].copy().sort_index()
+    columns = [column for column in ("open", "close") if column in market]
+    frame = market[columns].copy().sort_index()
+    if "open" not in frame:
+        frame["open"] = frame["close"]
+    frame["open"] = frame["open"].fillna(frame["close"])
     frame["market_return"] = frame["close"].pct_change().fillna(0.0)
+    previous_close = frame["close"].shift(1)
+    frame["overnight_return"] = (frame["open"] / previous_close - 1.0).fillna(0.0)
+    frame["intraday_return"] = (frame["close"] / frame["open"] - 1.0).fillna(0.0)
 
     usable = decisions.copy()
     usable["entry_date"] = pd.to_datetime(
@@ -148,17 +155,36 @@ def build_daily_backtest(
         float(settings.get("baseline_exposure", 1.0))
     )
 
-    frame["turnover"] = frame["exposure"].diff().abs().fillna(0.0)
+    baseline_exposure = float(settings.get("baseline_exposure", 1.0))
+    frame["prior_close_exposure"] = frame["exposure"].shift(1).fillna(
+        baseline_exposure
+    )
+    frame["turnover"] = (
+        frame["exposure"] - frame["prior_close_exposure"]
+    ).abs()
     cost_bps = float(
         settings.get("transaction_cost_bps_per_1x_turnover", 2.0)
     )
     frame["transaction_cost"] = (
         frame["turnover"] * cost_bps / 10000.0
     )
-    frame["strategy_return"] = (
-        frame["exposure"] * frame["market_return"]
-        - frame["transaction_cost"]
+    # The decision is executable at the next session's open. Existing exposure
+    # earns the overnight gap; only the new target earns open-to-close return.
+    # Multiplication preserves the interaction between both sub-periods.
+    frame["strategy_return_gross"] = (
+        (1.0 + frame["prior_close_exposure"] * frame["overnight_return"])
+        * (1.0 + frame["exposure"] * frame["intraday_return"])
+        - 1.0
     )
+    frame["strategy_return"] = (
+        frame["strategy_return_gross"] - frame["transaction_cost"]
+    )
+    return recompute_equity(frame)
+
+
+def recompute_equity(frame: pd.DataFrame) -> pd.DataFrame:
+    """Rebase equity curves after any requested date slice."""
+    frame = frame.copy()
     frame["strategy_equity"] = (1.0 + frame["strategy_return"]).cumprod()
     frame["benchmark_equity"] = (1.0 + frame["market_return"]).cumprod()
     return frame
@@ -208,6 +234,14 @@ def performance_metrics(
         if math.isfinite(ann_return) and drawdown < 0
         else math.nan
     )
+    running_high = equity.cummax()
+    underwater = equity.lt(running_high)
+    underwater_groups = underwater.ne(underwater.shift()).cumsum()
+    underwater_lengths = underwater.groupby(underwater_groups).sum()
+
+    yearly = (1.0 + returns).groupby(returns.index.year).prod() - 1.0
+    worst_year = int(yearly.idxmin()) if not yearly.empty else None
+
     return {
         "total_return": float(equity.iloc[-1] - 1.0),
         "annualized_return": ann_return,
@@ -216,6 +250,30 @@ def performance_metrics(
         "sortino_0rf": sortino,
         "max_drawdown": drawdown,
         "calmar": calmar,
+        "worst_year": worst_year,
+        "worst_year_return": (
+            float(yearly.min()) if not yearly.empty else math.nan
+        ),
+        "time_underwater_fraction": float(underwater.mean()),
+        "longest_underwater_sessions": (
+            int(underwater_lengths.max()) if not underwater_lengths.empty else 0
+        ),
+    }
+
+
+def holding_period_metrics(frame: pd.DataFrame) -> dict[str, float | int]:
+    """Summarize independent target-exposure holding periods."""
+    if frame.empty:
+        return {"independent_trades": 0, "worst_trade": math.nan}
+
+    changed = frame["exposure"].ne(frame["exposure"].shift())
+    periods = changed.cumsum()
+    returns = frame.groupby(periods)["strategy_return"].apply(
+        lambda values: float((1.0 + values).prod() - 1.0)
+    )
+    return {
+        "independent_trades": max(int(len(returns)) - 1, 0),
+        "worst_trade": float(returns.min()) if not returns.empty else math.nan,
     }
 
 
@@ -267,12 +325,20 @@ def main() -> int:
     )
 
     if args.start:
-        daily = daily.loc[daily.index >= pd.Timestamp(args.start)]
+        evaluation_start = pd.Timestamp(args.start)
+    else:
+        entry_dates = pd.to_datetime(decisions["entry_date"], errors="coerce").dropna()
+        if entry_dates.empty:
+            raise SystemExit("No executable decision entry dates are available")
+        evaluation_start = entry_dates.min()
+    daily = daily.loc[daily.index >= evaluation_start]
     if args.end:
         daily = daily.loc[daily.index <= pd.Timestamp(args.end)]
 
     if daily.empty:
         raise SystemExit("No market rows remain after date filtering")
+
+    daily = recompute_equity(daily)
 
     strategy = performance_metrics(
         daily,
@@ -304,6 +370,10 @@ def main() -> int:
         "maximum_exposure": float(daily["exposure"].max()),
         "minimum_exposure": float(daily["exposure"].min()),
         "total_turnover": float(daily["turnover"].sum()),
+        **holding_period_metrics(daily),
+        "benchmark_relative_total_return": (
+            strategy["total_return"] - benchmark["total_return"]
+        ),
         "assumptions": {
             "cash_return": 0.0,
             "borrowing_cost": 0.0,

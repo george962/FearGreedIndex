@@ -142,10 +142,13 @@ def append_prediction(
     ):
         return ledger, False
 
-    output = pd.concat(
-        [ledger, pd.DataFrame([row])],
-        ignore_index=True,
-    )
+    if ledger.empty:
+        output = pd.DataFrame([row], columns=LEDGER_COLUMNS)
+    else:
+        output = pd.concat(
+            [ledger, pd.DataFrame([row])],
+            ignore_index=True,
+        )
     return output[LEDGER_COLUMNS], True
 
 
@@ -205,6 +208,14 @@ def update_matured_outcomes(
         row_changed = False
         for ledger_column, event_column in mapping.items():
             if event_column not in event.index:
+                continue
+            if (
+                ledger_column == "realized_max_drawdown_20d"
+                and pd.isna(event.get("forward_20d"))
+            ):
+                # merge_signals computes a partial drawdown near the end of the
+                # dataset. Do not freeze that partial path as a realized 20-day
+                # outcome until the full horizon has matured.
                 continue
             new_value = _format_value(event.get(event_column))
             old_value = str(ledger_row.get(ledger_column, ""))

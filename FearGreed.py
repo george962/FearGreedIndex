@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 import ssl
@@ -11,10 +12,11 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 import certifi
+
+from http_retry import fetch_json_with_retry
 
 
 DATA_URL = (
@@ -46,30 +48,17 @@ SHEET_HEADERS = [
 ]
 
 
-def fetch_latest(timeout: int = 30) -> dict[str, Any]:
+def fetch_latest(timeout: int = 30, attempts: int = 4) -> dict[str, Any]:
     """Fetch the current index record from CNN's JSON feed."""
     request = Request(DATA_URL, headers=HEADERS)
     ssl_context = ssl.create_default_context(cafile=certifi.where())
 
-    try:
-        with urlopen(
-            request,
-            timeout=timeout,
-            context=ssl_context,
-        ) as response:
-            payload = json.load(response)
-    except HTTPError as error:
-        raise RuntimeError(
-            f"CNN returned HTTP {error.code} ({error.reason})"
-        ) from error
-    except URLError as error:
-        raise RuntimeError(
-            f"Could not reach CNN: {error.reason}"
-        ) from error
-    except json.JSONDecodeError as error:
-        raise RuntimeError(
-            "CNN returned invalid JSON"
-        ) from error
+    payload = fetch_json_with_retry(
+        request,
+        timeout=timeout,
+        context=ssl_context,
+        attempts=attempts,
+    )
 
     record = payload.get("fear_and_greed")
 
@@ -79,6 +68,26 @@ def fetch_latest(timeout: int = 30) -> dict[str, Any]:
         )
 
     return record
+
+
+def load_cached_latest(path: Path) -> dict[str, Any]:
+    """Load the newest repository observation as an explicit fallback."""
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        raise RuntimeError(f"Fallback dataset is empty: {path}")
+
+    def source_time(row: dict[str, str]) -> datetime:
+        raw = row.get("Source Timestamp UTC") or row.get("Date") or ""
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+
+    newest = max(rows, key=source_time)
+    timestamp = newest.get("Source Timestamp UTC") or newest.get("Date")
+    return {
+        "score": newest.get("Value"),
+        "rating": newest.get("Rating", ""),
+        "timestamp": timestamp,
+    }
 
 
 def parse_record(
@@ -479,6 +488,13 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=30,
     )
+    parser.add_argument("--retries", type=int, default=4)
+    parser.add_argument(
+        "--fallback-file",
+        type=Path,
+        default=Path("data/fear_greed_daily.csv"),
+    )
+    parser.add_argument("--max-data-age-hours", type=float, default=96.0)
     parser.add_argument(
         "--low",
         type=float,
@@ -516,6 +532,9 @@ def main() -> int:
             "Error: --timeout must be greater than zero"
         )
         return 2
+    if args.retries <= 0 or args.max_data_age_hours <= 0:
+        print("Error: --retries and --max-data-age-hours must be greater than zero")
+        return 2
 
     if not 0 <= args.low <= 100:
         print(
@@ -535,26 +554,40 @@ def main() -> int:
         )
         return 2
 
+    checked_time = datetime.now(timezone.utc).replace(microsecond=0)
+    data_source = "cnn_live"
+    fetch_warning = None
     try:
+        try:
+            record = fetch_latest(args.timeout, args.retries)
+        except RuntimeError as error:
+            record = load_cached_latest(args.fallback_file)
+            data_source = "repository_fallback"
+            fetch_warning = str(error)
         (
             data_date,
             value,
             rating,
             source_time,
         ) = parse_record(
-            fetch_latest(args.timeout)
+            record
         )
 
-        alert_type = determine_alert_type(
-            value,
-            args.low,
-            args.high,
+        data_age_hours = max(
+            0.0,
+            (checked_time - source_time.astimezone(timezone.utc)).total_seconds() / 3600.0,
         )
+        if data_age_hours > args.max_data_age_hours:
+            data_status = "stale"
+        elif data_source == "repository_fallback":
+            data_status = "cached_fallback"
+        else:
+            data_status = "fresh"
 
-        checked_time = datetime.now(
-            timezone.utc
-        ).replace(
-            microsecond=0
+        alert_type = (
+            determine_alert_type(value, args.low, args.high)
+            if data_status == "fresh"
+            else "unavailable"
         )
 
         checked_at_utc = checked_time.isoformat()
@@ -568,10 +601,13 @@ def main() -> int:
                 args.low,
                 args.high,
             )
+            write_github_output("data_status", data_status)
+            write_github_output("data_age_hours", f"{data_age_hours:.2f}")
+            write_github_output("data_source", data_source)
 
         sheet_updated = False
 
-        if args.update_sheet:
+        if args.update_sheet and data_status == "fresh":
             sheet_updated = update_google_sheet(
                 checked_time=checked_time,
                 source_time=source_time,
@@ -601,6 +637,10 @@ def main() -> int:
         "rating": rating,
         "alert_type": alert_type,
         "sheet_updated": sheet_updated,
+        "data_status": data_status,
+        "data_age_hours": round(data_age_hours, 2),
+        "data_source": data_source,
+        "fetch_warning": fetch_warning,
     }
 
     if args.json:
@@ -613,6 +653,11 @@ def main() -> int:
         print(
             f"Alert status: {alert_type}"
         )
+        print(
+            f"Data status: {data_status} ({data_age_hours:.1f}h old, {data_source})"
+        )
+        if fetch_warning:
+            print(f"Fetch warning: {fetch_warning}")
 
     return 0
 

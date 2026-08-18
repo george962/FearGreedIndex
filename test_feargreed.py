@@ -1,7 +1,9 @@
+import tempfile
 import unittest
 from datetime import datetime, timezone
+from pathlib import Path
 
-from FearGreed import parse_record
+from FearGreed import load_cached_latest, parse_record
 
 
 class ParseRecordTests(unittest.TestCase):
@@ -42,6 +44,18 @@ class ParseRecordTests(unittest.TestCase):
     def test_rejects_unexpected_response(self):
         with self.assertRaisesRegex(ValueError, "unexpected data format"):
             parse_record({})
+
+    def test_loads_newest_repository_fallback(self):
+        content = """Date,Value,Rating,Source Timestamp UTC
+2026-08-16,55,neutral,2026-08-16T23:59:00+00:00
+2026-08-17,60,greed,2026-08-17T23:59:00+00:00
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "fear.csv"
+            path.write_text(content, encoding="utf-8")
+            record = load_cached_latest(path)
+        self.assertEqual(record["score"], "60")
+        self.assertEqual(record["rating"], "greed")
 
 
 if __name__ == "__main__":

@@ -54,6 +54,7 @@ jobs:
           echo "Alert type: ${{ steps.feargreed.outputs.alert_type }}"
 
       - name: Process alert notification
+        if: steps.feargreed.outputs.data_status == 'fresh'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ALERT_TYPE: ${{ steps.feargreed.outputs.alert_type }}

@@ -66,6 +66,10 @@ class StrategyValidationTests(unittest.TestCase):
                 "market_regime": ["correction"] * 500,
                 "timing_side": ["BUY"] * 500,
                 "forward_5d": [0.01] * 500,
+                "_forward_5d_known_date": (
+                    pd.date_range("2023-01-06", periods=500, freq="D")
+                    .strftime("%Y-%m-%d")
+                ),
             }
         )
         summary, predicted = evaluate_fold(
@@ -81,10 +85,41 @@ class StrategyValidationTests(unittest.TestCase):
             minimum_test_rows=10,
             minimum_relative_brier_improvement=-1.0,
         )
-        self.assertEqual(summary["train_rows"], 365)
+        self.assertEqual(summary["train_rows"], 360)
         self.assertTrue(
             (pd.to_datetime(predicted["decision_date"]) >= pd.Timestamp("2024-01-01")).all()
         )
+
+    def test_fold_excludes_training_outcome_that_matures_after_cutoff(self):
+        history = pd.DataFrame(
+            {
+                "decision_date": ["2023-12-20", "2023-12-29", "2024-01-05"],
+                "_forward_5d_known_date": [
+                    "2023-12-27",
+                    "2024-01-08",
+                    "2024-01-12",
+                ],
+                "action": ["BUY GRADUALLY"] * 3,
+                "market_regime": ["correction"] * 3,
+                "timing_side": ["BUY"] * 3,
+                "forward_5d": [0.01, 0.02, -0.01],
+            }
+        )
+
+        summary, _ = evaluate_fold(
+            history,
+            {
+                "name": "test",
+                "train_end": "2023-12-31",
+                "test_start": "2024-01-01",
+                "test_end": "2024-12-31",
+            },
+            minimum_group_sample=1,
+            shrinkage_strength=1.0,
+            minimum_test_rows=1,
+            minimum_relative_brier_improvement=-1.0,
+        )
+        self.assertEqual(summary["train_rows"], 1)
 
 
 if __name__ == "__main__":

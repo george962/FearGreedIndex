@@ -1,12 +1,46 @@
 # FearGreedIndex
 
-FearGreedIndex is a lightweight market-sentiment monitor built with Python, GitHub Actions, GitHub Issues, Google Sheets, and a versioned CSV dataset. It retrieves the latest **CNN Fear & Greed Index** reading directly from CNN's JSON feed, classifies the reading against configurable thresholds, and automates three jobs:
+FearGreedIndex is a research-grade tactical-allocation decision-support project built with Python, GitHub Actions, and versioned market data. It combines the **CNN Fear & Greed Index** with point-in-time S&P 500 features, historical analogs, a fast timing layer, portfolio backtesting, anchored walk-forward validation, and an immutable live signal ledger.
+
+It also retains the original monitoring jobs:
 
 1. **Alerting:** Create, reopen, update, or close GitHub Issues when the index enters or leaves extreme fear or extreme greed.
 2. **Intraday history:** Record changed index values in Google Sheets for later analysis and visualization.
 3. **Daily history:** Maintain one Fear & Greed value per UTC date in `data/fear_greed_daily.csv` and commit changes to the repository.
 
-The project is a monitoring and data-collection tool. It does not generate trading signals or investment recommendations.
+The dashboard produces research actions such as `BUY GRADUALLY`, `WAIT ON BUYING`, and early buy/trim warnings. These are not automated brokerage instructions. Strategy version `feargreed-v2.1.0` is explicitly **provisional**: retrospective walk-forward results are useful evidence, but the permanent ledger is the first genuinely untouched forward record. Tactical sizing should remain disabled until the acceptance gates are met on unseen data.
+
+## v2 validation-first architecture
+
+The project has one source of truth for decisions: `scripts/build_dashboard.py`. The dashboard, historical replay, unified portfolio backtest, validation job, and daily ledger all call that engine.
+
+| Component | Purpose |
+| --- | --- |
+| `scripts/build_dashboard.py` | Canonical point-in-time feature, analog, timing, and decision engine |
+| `backtest.py` | Next-open exposure-overlay simulation with costs and strategy-level risk metrics |
+| `scripts/strategy_validation.py` | Anchored 2024, 2025, and 2026-YTD holdout evaluation and probability calibration |
+| `scripts/signal_ledger.py` | Append-only, hashed daily predictions with outcomes filled only after maturity |
+| `strategy_manifest.json` | Frozen version, intended use, limitations, and change policy |
+| `reports/` | Generated walk-forward and backtest artifacts (not committed) |
+
+Run the research checks locally:
+
+```bash
+python -m unittest -v \
+  test_feargreed.py \
+  test_fear_greed_market_data.py \
+  test_dashboard.py \
+  test_backtest.py \
+  test_http_retry.py \
+  test_strategy_validation.py \
+  test_signal_ledger.py
+
+python scripts/strategy_validation.py --skip-yahoo-fallback
+python backtest.py --skip-yahoo-fallback
+python scripts/signal_ledger.py --skip-yahoo-fallback
+```
+
+Point-in-time replay prevents direct look-ahead, but it cannot prove that thresholds originally selected after inspecting 2021–2026 were out of sample. Do not retune a failed holdout and keep the same strategy version. Bump the manifest version, preserve prior reports, and treat subsequent ledger observations as the clean test.
 
 ## How it works
 
@@ -51,6 +85,11 @@ The default alert thresholds are:
 | --- | --- |
 | `FearGreed.py` | Current-value fetcher, threshold classifier, GitHub Actions output writer, and Google Sheets updater |
 | `FearGreedHistory.py` | Daily history fetcher, deduplicator, merger, and CSV writer |
+| `FearGreedMarketData.py` | Point-in-time SPX cache and combined analysis dataset builder |
+| `scripts/build_dashboard.py` | Canonical decision engine and static dashboard builder |
+| `backtest.py` | Unified portfolio backtest using next-session-open decisions |
+| `scripts/strategy_validation.py` | Anchored walk-forward validation |
+| `scripts/signal_ledger.py` | Immutable live-prediction ledger |
 | `data/fear_greed_daily.csv` | Versioned one-row-per-day CNN Fear & Greed dataset |
 | `.github/workflows/alert.yml` | Scheduled GitHub Issues alert workflow |
 | `.github/workflows/spreasheet.yml` | Scheduled Google Sheets history workflow |
@@ -228,6 +267,9 @@ The automated dataset intentionally starts on **2021-02-01**, the reliable bound
 | `--update-sheet` | Insert the reading into Google Sheets |
 | `--append-unchanged` | Insert a row even when the rounded value is unchanged |
 | `--timeout SECONDS` | Set the CNN request timeout; default is `30` |
+| `--retries COUNT` | Retry transient CNN failures with bounded exponential backoff; default is `4` |
+| `--fallback-file PATH` | Repository CSV used only when the live request fails |
+| `--max-data-age-hours HOURS` | Mark old data stale and suppress alert/sheet mutations; default is `96` |
 | `--low VALUE` | Set the low-alert threshold; default is `25` |
 | `--high VALUE` | Set the high-alert threshold; default is `75` |
 | `--spreadsheet NAME` | Select the Google spreadsheet |

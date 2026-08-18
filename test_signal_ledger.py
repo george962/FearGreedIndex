@@ -111,6 +111,29 @@ class SignalLedgerTests(unittest.TestCase):
         )
         self.assertEqual(updated.iloc[0]["realized_5d"], "0.03")
 
+    def test_partial_drawdown_is_not_frozen_before_20d_return_matures(self):
+        ledger, _ = append_prediction(
+            pd.DataFrame(),
+            sample_prediction(),
+            recorded_at_utc="2026-08-18T00:00:00+00:00",
+        )
+        events = pd.DataFrame(
+            {
+                "signal_date": [pd.Timestamp("2026-08-17")],
+                "entry_date": [pd.Timestamp("2026-08-18")],
+                "entry_price": [100.0],
+                "forward_20d": [float("nan")],
+                "max_drawdown_20d": [-0.04],
+            }
+        )
+
+        updated, _ = update_matured_outcomes(
+            ledger,
+            events,
+            updated_at_utc="2026-08-25T00:00:00+00:00",
+        )
+        self.assertEqual(updated.iloc[0]["realized_max_drawdown_20d"], "")
+
 
 if __name__ == "__main__":
     unittest.main()
