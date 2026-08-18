@@ -14,10 +14,11 @@
 | V3-006 Regularized return regression | COMPLETE | PR #14, `EXP-002` |
 | V3-007 Gradient-boosting candidate | COMPLETE | PR #16, `EXP-003` |
 | V3-008 Random-forest benchmark | COMPLETE | PR #18, `EXP-004` |
+| V3-009 Common walk-forward evaluator | COMPLETE | PR #20, `v3-evaluator-001` |
 
 ## Active
 
-- **V3-009 — Common walk-forward evaluator** (issue #19)
+- **V3-010 — Model tournament scoreboard** is next.
 
 ## Next
 
@@ -29,5 +30,7 @@
 
 - All initial models use the same `v3-features-001` and `v3-labels-001` point-in-time contracts.
 - All initial experiments use the same 2024, 2025, and 2026 YTD chronological folds.
-- Random forest currently looks strongest in aggregate predictive metrics, but **no champion has been selected**. Formal ranking belongs to V3-010.
-- Trading/action evaluation remains intentionally separate until the decision-policy stage; V3-009 provides generic backtest metrics without inventing a policy early.
+- `v3-evaluator-001` verified identical realized-date hashes within each comparable model lane.
+- Random forest is strongest among the initial candidates in aggregate predictive metrics, but **no champion has been selected**.
+- Even random forest has negative mean relative Brier improvement versus the simple fold base-rate benchmark, and all return-model families have negative mean Spearman rank correlation across fold/horizon cells.
+- Trading/action evaluation remains intentionally separate until the decision-policy stage; generic backtest utilities now exist without embedding a prediction-to-action mapping.
