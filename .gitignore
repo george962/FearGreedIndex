@@ -12,3 +12,6 @@ site/*
 reports/*.csv
 reports/*.json
 !reports/.gitkeep
+
+v3/data/*.parquet
+v3/reports/*.json
