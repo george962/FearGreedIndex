@@ -48,6 +48,14 @@ jobs:
       - name: Validate v3 dataset
         run: python v3/evaluation/validate_dataset.py
 
+      - name: Run current v3 stage checks
+        run: |
+          if [ -f v3/ci/run_current_stage.py ]; then
+            python v3/ci/run_current_stage.py
+          else
+            echo "No current-stage hook yet."
+          fi
+
       - name: Freeze v2.1 baseline for v3 comparison
         run: python v3/baseline/freeze_v2_1.py
 
