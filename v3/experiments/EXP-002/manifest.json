@@ -1,0 +1,30 @@
+{
+  "ci_run_id": 32197058166,
+  "code_commit_sha": "c7bd05dd57d36c2486ca57a960b4066ecd820757",
+  "data_sha256": "16d6528800ce12ff92b8e6e9f7ec0764450b11165baf7e14d429fde443cd96f1",
+  "experiment_id": "EXP-002",
+  "feature_set_version": "v3-features-001",
+  "fold_metrics_sha256": "bbce926d04f12330c2803966f5284d4d1efe0de8f99f3492c8b006dc57aa10df",
+  "hyperparameters": {
+    "alpha": 1.0,
+    "imputer": "training_median",
+    "model": "Ridge",
+    "scaler": "training_standard_scaler"
+  },
+  "immutable": true,
+  "label_version": "v3-labels-001",
+  "metrics_sha256": "490eb1a1e171d2d3e2456b33c1f6f886a3d47886b9471e095271bf747987adbb",
+  "model_name": "ridge_return_v1",
+  "model_type": "regularized_return_regression",
+  "notes": "First untuned regularized return-regression baseline. Preserved as observed; weak folds are not retuned away.",
+  "predictions_sha256": "b1a7b755b7e0072f476ad924167b95b2b1bd82e1b9edcebf2182a065bd037018",
+  "promotion_status": "not_evaluated",
+  "random_seed": null,
+  "status": "baseline",
+  "task": "V3-006",
+  "training_test_periods": [
+    {"fold": "2024", "test_end": "2024-12-31", "test_start": "2024-01-01", "train_end": "2023-12-31"},
+    {"fold": "2025", "test_end": "2025-12-31", "test_start": "2025-01-01", "train_end": "2024-12-31"},
+    {"fold": "2026_ytd", "test_end": "2026-12-31", "test_start": "2026-01-01", "train_end": "2025-12-31"}
+  ]
+}
