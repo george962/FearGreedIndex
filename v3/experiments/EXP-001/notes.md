@@ -14,4 +14,6 @@ This is the first frozen v3 model experiment. It uses the 41-feature `v3-feature
 
 The model is a valid chronological baseline, not a champion. Several folds are weak or overconfident. The most obvious failure is the 2025 60-session model (Brier about 0.478, log loss about 1.995). These results are intentionally preserved rather than retuned after observation.
 
+The exact 659-row `predictions.parquet` used for these metrics is preserved in GitHub Actions run `32196286533` (`v3-evidence-32196286533`) under `v3/reports/logistic_baseline_predictions.parquet`. Its SHA-256 is recorded in `manifest.json` as `389de8db830e2b9771eb5ea72fbd0b2b4ec52e115b318944513256d1ad769de7`.
+
 Future V3-006 through V3-010 work must compare against this recorded experiment using the common evaluator rather than rewriting EXP-001.
