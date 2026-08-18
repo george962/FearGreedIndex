@@ -1,0 +1,33 @@
+{
+  "ci_run_id": 32197829836,
+  "code_commit_sha": "251d1a7031c6f0c40b0586b64ade9c08e5ddcc37",
+  "data_sha256": "16d6528800ce12ff92b8e6e9f7ec0764450b11165baf7e14d429fde443cd96f1",
+  "experiment_id": "EXP-004",
+  "feature_set_version": "v3-features-001",
+  "fold_metrics_sha256": "9e7f2a8ac567fe30959e0c87da96eaafe76fae66ea6206096b95a49a1d44bf0a",
+  "hyperparameters": {
+    "bootstrap": true,
+    "max_depth": 6,
+    "max_features": "sqrt",
+    "min_samples_leaf": 10,
+    "n_estimators": 300,
+    "n_jobs": 1,
+    "random_state": 42
+  },
+  "immutable": true,
+  "label_version": "v3-labels-001",
+  "metrics_artifact_sha256": "b942d809edb41dd755cd54fa015888d4ba5ea78fba5c76aa6b83fdb49bcc4e6c",
+  "model_name": "random_forest_v1",
+  "model_type": "random_forest",
+  "notes": "Fixed nonlinear robustness benchmark; observed performance is preserved without post-hoc tuning.",
+  "predictions_sha256": "36612af4f0dedd044163c2ef119af93997b7f5e417ba3ef90d98d4800ab616bb",
+  "promotion_status": "not_evaluated",
+  "random_seed": 42,
+  "status": "benchmark",
+  "task": "V3-008",
+  "training_test_periods": [
+    {"fold": "2024", "test_end": "2024-12-31", "test_start": "2024-01-01", "train_end": "2023-12-31"},
+    {"fold": "2025", "test_end": "2025-12-31", "test_start": "2025-01-01", "train_end": "2024-12-31"},
+    {"fold": "2026_ytd", "test_end": "2026-12-31", "test_start": "2026-01-01", "train_end": "2025-12-31"}
+  ]
+}
