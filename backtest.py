@@ -25,6 +25,29 @@ from scripts.research_common import (  # noqa: E402
 )
 
 
+
+def _json_safe(value):
+    """Convert NumPy/Pandas values and non-finite floats to strict JSON values."""
+    if isinstance(value, dict):
+        return {
+            str(key): _json_safe(item)
+            for key, item in value.items()
+        }
+
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+
+    if isinstance(value, np.generic):
+        value = value.item()
+
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+
+    if isinstance(value, pd.Timestamp):
+        return value.isoformat()
+
+    return value
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, default=ROOT / "config.json")
@@ -307,11 +330,11 @@ def main() -> int:
     decisions.to_csv(decision_path, index=False)
     action_scorecard(decisions).to_csv(scorecard_path, index=False)
     summary_path.write_text(
-        json.dumps(summary, indent=2, allow_nan=False),
+        json.dumps(_json_safe(summary), indent=2, allow_nan=False),
         encoding="utf-8",
     )
 
-    print(json.dumps(summary, indent=2, allow_nan=False))
+    print(json.dumps(_json_safe(summary), indent=2, allow_nan=False))
     print(f"\nWrote {daily_path}")
     print(f"Wrote {decision_path}")
     print(f"Wrote {scorecard_path}")

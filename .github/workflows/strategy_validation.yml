@@ -2,6 +2,22 @@ name: Validate Fear and Greed Strategy
 
 on:
   workflow_dispatch:
+
+  push:
+    branches:
+      - main
+    paths:
+      - "backtest.py"
+      - "config.json"
+      - "strategy_manifest.json"
+      - "scripts/build_dashboard.py"
+      - "scripts/research_common.py"
+      - "scripts/strategy_validation.py"
+      - "scripts/signal_ledger.py"
+      - "test_strategy_validation.py"
+      - "test_signal_ledger.py"
+      - ".github/workflows/strategy_validation.yml"
+
   schedule:
     - cron: "15 14 * * 6"
 
