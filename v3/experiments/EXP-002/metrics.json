@@ -1,0 +1,20 @@
+{
+  "experiment_id": "EXP-002",
+  "feature_count": 41,
+  "feature_set_version": "v3-features-001",
+  "fold_horizon_evidence": [
+    {"fold":"2024","horizon":5,"mae":0.014881608211375448,"maximum_predicted_return":0.02199324397632217,"mean_actual_return":0.003872768365974413,"mean_predicted_return":0.0007351859366703934,"minimum_predicted_return":-0.022943232291003264,"prediction_rows":252,"realized_rows":252,"rmse":0.019347617491281464,"training_cutoff":"2023-12-31","training_rows":729},
+    {"fold":"2024","horizon":20,"mae":0.030522975700003733,"maximum_predicted_return":0.04484565965825157,"mean_actual_return":0.017123731908082546,"mean_predicted_return":0.0026700966608312706,"minimum_predicted_return":-0.031097065357795793,"prediction_rows":252,"realized_rows":252,"rmse":0.03702238566402076,"training_cutoff":"2023-12-31","training_rows":714},
+    {"fold":"2024","horizon":60,"mae":0.04325307270073906,"maximum_predicted_return":0.08227315703949953,"mean_actual_return":0.04057878727285649,"mean_predicted_return":0.012276956898463202,"minimum_predicted_return":-0.05803726274465617,"prediction_rows":252,"realized_rows":252,"rmse":0.05481216003413885,"training_cutoff":"2023-12-31","training_rows":674},
+    {"fold":"2025","horizon":5,"mae":0.018386567658388593,"maximum_predicted_return":0.06303470628643804,"mean_actual_return":0.0030015826954164753,"mean_predicted_return":-0.00024796391147737434,"minimum_predicted_return":-0.035977774006762005,"prediction_rows":250,"realized_rows":250,"rmse":0.024759533686484737,"training_cutoff":"2024-12-31","training_rows":981},
+    {"fold":"2025","horizon":20,"mae":0.04595689922000142,"maximum_predicted_return":0.08730195962266449,"mean_actual_return":0.012384803160695373,"mean_predicted_return":-0.007911041241626473,"minimum_predicted_return":-0.10459272645542633,"prediction_rows":250,"realized_rows":250,"rmse":0.06202195566500157,"training_cutoff":"2024-12-31","training_rows":966},
+    {"fold":"2025","horizon":60,"mae":0.09929709010205129,"maximum_predicted_return":0.11305444720173072,"mean_actual_return":0.037949191403858246,"mean_predicted_return":-0.01248806410725609,"minimum_predicted_return":-0.19604100866287044,"prediction_rows":250,"realized_rows":250,"rmse":0.13534558803882102,"training_cutoff":"2024-12-31","training_rows":926},
+    {"fold":"2026_ytd","horizon":5,"mae":0.014693516766340828,"maximum_predicted_return":0.017021450050111207,"mean_actual_return":0.003606306754589761,"mean_predicted_return":0.0021548161008682685,"minimum_predicted_return":-0.011771794830988929,"prediction_rows":157,"realized_rows":152,"rmse":0.01906484345384804,"training_cutoff":"2025-12-31","training_rows":1231},
+    {"fold":"2026_ytd","horizon":20,"mae":0.042637599409341746,"maximum_predicted_return":0.04793267577291718,"mean_actual_return":0.014305709930289423,"mean_predicted_return":0.0048777411542716784,"minimum_predicted_return":-0.034521570091363606,"prediction_rows":157,"realized_rows":137,"rmse":0.049097566172507996,"training_cutoff":"2025-12-31","training_rows":1216},
+    {"fold":"2026_ytd","horizon":60,"mae":0.06194393661803358,"maximum_predicted_return":0.11030649202762409,"mean_actual_return":0.06345833429021713,"mean_predicted_return":0.019720259913175192,"minimum_predicted_return":-0.05582371576139962,"prediction_rows":157,"realized_rows":97,"rmse":0.07382689723036845,"training_cutoff":"2025-12-31","training_rows":1176}
+  ],
+  "model_name": "ridge_return_v1",
+  "note": "Frozen V3-006 Ridge return-regression baseline evidence. No post-hoc tuning was performed after viewing these results.",
+  "prediction_rows": 659,
+  "status": "BASELINE_RECORDED"
+}
