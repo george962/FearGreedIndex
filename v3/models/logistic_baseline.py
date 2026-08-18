@@ -70,7 +70,6 @@ def make_pipeline() -> Pipeline:
             (
                 "model",
                 LogisticRegression(
-                    penalty="l2",
                     C=LOGISTIC_C,
                     solver="liblinear",
                     max_iter=2000,
