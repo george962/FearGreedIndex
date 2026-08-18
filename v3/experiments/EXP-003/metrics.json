@@ -1,0 +1,22 @@
+{
+  "experiment_id": "EXP-003",
+  "model_name": "hist_gradient_boosting_v1",
+  "prediction_rows": 659,
+  "aggregate_evidence": {
+    "mean_classification_brier": 0.32070481693766023,
+    "mean_classification_log_loss": 0.9722580116900159,
+    "mean_return_mae": 0.038303702904104515,
+    "mean_return_rmse": 0.04782571461755262,
+    "mean_drawdown_20d_mae": 0.028444478095777766,
+    "mean_drawdown_20d_rmse": 0.03597145055564687
+  },
+  "selected_fold_evidence": {
+    "2024_p_up_60d": {"brier_score": 0.37903428572229064, "log_loss": 1.1513497181185142},
+    "2025_p_up_60d": {"brier_score": 0.3140780112139646, "log_loss": 1.0339708657008793},
+    "2026_ytd_p_up_60d": {"brier_score": 0.10673070593137819, "log_loss": 0.4224100595408733},
+    "2025_return_60d": {"mae": 0.09233241224348251, "rmse": 0.11940087118043925},
+    "2026_ytd_return_60d": {"mae": 0.03725472702282662, "rmse": 0.04478627430736799}
+  },
+  "status": "CANDIDATE_RECORDED",
+  "note": "Mixed fixed nonlinear result preserved without post-hoc tuning. Full fold evidence is in fold_metrics.csv and CI artifact run 32197501410."
+}
