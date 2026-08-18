@@ -1,0 +1,47 @@
+{
+  "strategy_version": "feargreed-v2.1.0",
+  "data_source": "data/fear_greed_daily.csv + data/spx_daily.csv",
+  "start": "2021-02-02",
+  "end": "2026-08-18",
+  "strategy": {
+    "total_return": 1.0255497540755911,
+    "annualized_return": 0.1363047918470428,
+    "annualized_volatility": 0.1704775128650777,
+    "sharpe_0rf": 0.8348567471308632,
+    "sortino_0rf": 1.1383701973710656,
+    "max_drawdown": -0.25652095176297596,
+    "calmar": 0.5313592940859962,
+    "worst_year": 2022,
+    "worst_year_return": -0.1934044347325129,
+    "time_underwater_fraction": 0.8649425287356322,
+    "longest_underwater_sessions": 512
+  },
+  "benchmark": {
+    "total_return": 1.0381676977725869,
+    "annualized_return": 0.137582985815641,
+    "annualized_volatility": 0.16623051463163516,
+    "sharpe_0rf": 0.8586333911181242,
+    "sortino_0rf": 1.185920209106269,
+    "max_drawdown": -0.25425096631736044,
+    "calmar": 0.5411306309212117,
+    "worst_year": 2022,
+    "worst_year_return": -0.194428272071266,
+    "time_underwater_fraction": 0.8627873563218391,
+    "longest_underwater_sessions": 512
+  },
+  "annualized_return_difference": -0.0012781939685981847,
+  "max_drawdown_difference": -0.002269985445615519,
+  "average_exposure": 1.0058189655172414,
+  "maximum_exposure": 1.2,
+  "minimum_exposure": 0.75,
+  "total_turnover": 14.0,
+  "independent_trades": 107,
+  "worst_trade": -0.08771521499499546,
+  "benchmark_relative_total_return": -0.01261794369699576,
+  "assumptions": {
+    "cash_return": 0.0,
+    "borrowing_cost": 0.0,
+    "transaction_cost_bps_per_1x_turnover": 2.0,
+    "note": "This is a diagnostic exposure-overlay backtest. It is not a brokerage fill simulator."
+  }
+}
