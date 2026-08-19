@@ -1,0 +1,86 @@
+{
+  "as_of": "2026-08-18",
+  "candidate_id": "UST-EXP-004",
+  "champion_selected": false,
+  "failed_or_blocked_gates": [
+    "evidence_completeness",
+    "prediction_prerequisite",
+    "calibration",
+    "after_cost_portfolio",
+    "cross_year_robustness",
+    "sharpe",
+    "maximum_drawdown",
+    "cost_robustness",
+    "parameter_robustness"
+  ],
+  "gate_version": "v3-champion-gates-001",
+  "gates": {
+    "after_cost_portfolio": {
+      "details": {},
+      "reason": "after_cost_portfolio cannot be used for promotion because the prediction prerequisite failed; V3-017 extra sizing remains locked.",
+      "status": "BLOCKED"
+    },
+    "calibration": {
+      "details": {},
+      "reason": "calibration cannot be used for promotion because the prediction prerequisite failed; V3-017 extra sizing remains locked.",
+      "status": "BLOCKED"
+    },
+    "cost_robustness": {
+      "details": {},
+      "reason": "cost_robustness cannot be used for promotion because the prediction prerequisite failed; V3-017 extra sizing remains locked.",
+      "status": "BLOCKED"
+    },
+    "cross_year_robustness": {
+      "details": {},
+      "reason": "cross_year_robustness cannot be used for promotion because the prediction prerequisite failed; V3-017 extra sizing remains locked.",
+      "status": "BLOCKED"
+    },
+    "data_quality": {
+      "details": {
+        "frozen_v2_1_reproducible": true,
+        "leakage_gate_pass": true,
+        "point_in_time_pass": true,
+        "sample_hashes_match": true
+      },
+      "reason": "Data-quality and leakage gates pass.",
+      "status": "PASS"
+    },
+    "evidence_completeness": {
+      "details": {
+        "evidence_complete_flag": false,
+        "evidence_hashes_valid": true,
+        "missing_lineage": [],
+        "missing_sections": []
+      },
+      "reason": "Required champion evidence or lineage is missing/incomplete.",
+      "status": "FAIL"
+    },
+    "maximum_drawdown": {
+      "details": {},
+      "reason": "maximum_drawdown cannot be used for promotion because the prediction prerequisite failed; V3-017 extra sizing remains locked.",
+      "status": "BLOCKED"
+    },
+    "parameter_robustness": {
+      "details": {},
+      "reason": "parameter_robustness cannot be used for promotion because the prediction prerequisite failed; V3-017 extra sizing remains locked.",
+      "status": "BLOCKED"
+    },
+    "prediction_prerequisite": {
+      "details": {
+        "absolute_prediction_gate_pass": false,
+        "source_gate_version": "v3-tournament-001"
+      },
+      "reason": "Candidate does not pass the pre-existing absolute prediction-readiness gate.",
+      "status": "FAIL"
+    },
+    "sharpe": {
+      "details": {},
+      "reason": "sharpe cannot be used for promotion because the prediction prerequisite failed; V3-017 extra sizing remains locked.",
+      "status": "BLOCKED"
+    }
+  },
+  "note": "V3-018 determines promotion eligibility only. V3-019 must still select exactly one passing candidate before any champion manifest or extra sizing can activate.",
+  "promotion_ready": false,
+  "status": "NOT_PROMOTION_READY",
+  "v3_019_eligible": false
+}
