@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - "v3/evaluation/exp007_rate_regime.py"
+      - "v3/ci/check_exp007_evidence.py"
       - "v3/tests/test_exp007_rate_regime.py"
       - "v3/experiments/EXP-007/**"
       - "v3/checkpoints/EXP-007.md"
       - "v3/reports/exp007_evaluation.json"
       - "v3/reports/exp007_metrics.csv"
       - "v3/reports/exp007_regime_diagnostics.csv"
+      - "v3/STATUS.md"
       - ".github/workflows/exp007_pr_validation.yml"
 
 permissions:
@@ -61,6 +63,14 @@ jobs:
       - name: Run pre-registered EXP-007 evaluation
         run: python -m v3.evaluation.exp007_rate_regime
 
+      - name: Verify committed EXP-007 evidence reproduces exactly
+        run: |
+          git diff --exit-code -- \
+            v3/reports/exp007_evaluation.json \
+            v3/reports/exp007_metrics.csv \
+            v3/reports/exp007_regime_diagnostics.csv
+          python -m v3.ci.check_exp007_evidence
+
       - name: Verify frozen v2.1 benchmark
         run: |
           python -m v3.baseline.freeze_v2_1
@@ -78,5 +88,6 @@ jobs:
             v3/reports/exp007_predictions.parquet
             v3/experiments/EXP-007/PLAN.md
             v3/experiments/EXP-007/manifest.json
+            v3/checkpoints/EXP-007.md
           if-no-files-found: warn
           retention-days: 90
