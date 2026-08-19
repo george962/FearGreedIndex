@@ -1,0 +1,54 @@
+name: Bootstrap V3 Treasury Snapshot
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/v3_treasury_snapshot_bootstrap.yml"
+      - "v3/data_sources/fetch_treasury.py"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fear-greed-v3-treasury-bootstrap-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  bootstrap:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out PR head branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Generate frozen Treasury snapshot
+        run: |
+          set -euo pipefail
+          python v3/data_sources/fetch_treasury.py
+          gzip -dc v3/data/treasury_daily.csv.gz > v3/data/treasury_daily.csv
+
+      - name: Commit snapshot and remove bootstrap workflow
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add v3/data/treasury_daily.csv v3/data/treasury_source.json
+          git rm .github/workflows/v3_treasury_snapshot_bootstrap.yml
+          git commit -m "Freeze Treasury research snapshot"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
