@@ -1,6 +1,6 @@
 {
   "experiment_id": "EXP-006",
-  "status": "pre_registered_active",
+  "status": "completed_negative_experiment",
   "pre_registered_issue": 46,
   "research_cutoff": "2026-08-18",
   "feature_set_version": "v3-features-004-treasury",
@@ -23,7 +23,10 @@
       "standardize": true,
       "C": 1.0,
       "solver": "lbfgs",
-      "max_iter": 1000
+      "max_iter": 1000,
+      "viability_gate_pass": false,
+      "mean_relative_brier_improvement": -0.6685605372964162,
+      "mean_roc_auc": 0.35229479381953804
     },
     "opportunity_random_forest_v1": {
       "imputer": "median",
@@ -33,7 +36,10 @@
       "max_features": "sqrt",
       "bootstrap": true,
       "random_state": 42,
-      "n_jobs": 1
+      "n_jobs": 1,
+      "viability_gate_pass": false,
+      "mean_relative_brier_improvement": -0.14783280324408685,
+      "mean_roc_auc": 0.356072839756703
     }
   },
   "viability_gate": {
@@ -43,9 +49,26 @@
     "minimum_positive_auc_folds": 2,
     "require_identical_test_sample_hashes": true
   },
+  "result": {
+    "experiment_viability_pass": false,
+    "decision": "DO_NOT_ADVANCE_OPPORTUNITY_TARGET_UNDER_EXP_006",
+    "sample_hashes_match": true,
+    "champion_selected": false,
+    "v3_019_eligible": false,
+    "sizing_multiplier": 1.0,
+    "notable_regime_instability": {
+      "random_forest_roc_auc_2024": 0.6292735722926085,
+      "random_forest_roc_auc_2025": 0.28187565858798735,
+      "random_forest_roc_auc_2026_ytd": 0.15706928838951312
+    }
+  },
   "champion_gate_version": "v3-champion-gates-001",
   "production_policy_changed": false,
   "sizing_changed": false,
   "tuning_after_result_allowed_under_same_version": false,
-  "evidence": {}
+  "evidence": {
+    "evaluation_sha256": "ec65abcaef1d388b29ca5bbb9598c40a1c3aa7c8f0909cc2c5e414e067583ea8",
+    "metrics_sha256": "46fcc9572b49a162d16ba9f09709ff51c7b124f7a984ea1197c55cf1e9cfdab2",
+    "state_distribution_sha256": "612e74d1f413626023d554ab04fe4b93fd0a161501208e20266d86d1223d80c5"
+  }
 }
