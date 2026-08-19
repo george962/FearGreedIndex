@@ -1,0 +1,35 @@
+{
+  "policy_version": "v3-decision-policy-001",
+  "status": "research_only",
+  "threshold_origin": "pre_registered_semantic_thresholds_not_backtest_optimized",
+  "confidence_gate": {
+    "minimum_calibration_quality": 0.55,
+    "maximum_uncertainty_score": 0.55
+  },
+  "strong_add": {
+    "minimum_expected_return_20d": 0.03,
+    "minimum_probability_up_20d": 0.65,
+    "minimum_predicted_drawdown_20d": -0.08,
+    "maximum_probability_further_5pct_decline_20d": 0.30,
+    "minimum_calibration_quality": 0.70,
+    "maximum_uncertainty_score": 0.35
+  },
+  "add_modestly": {
+    "minimum_expected_return_20d": 0.01,
+    "minimum_probability_up_20d": 0.57,
+    "minimum_predicted_drawdown_20d": -0.12,
+    "maximum_probability_further_5pct_decline_20d": 0.45
+  },
+  "wait_for_better_entry": {
+    "maximum_expected_return_20d": -0.01,
+    "maximum_probability_up_20d": 0.43,
+    "maximum_predicted_drawdown_20d": -0.15,
+    "minimum_probability_further_5pct_decline_20d": 0.60
+  },
+  "action_semantics": {
+    "STRONG ADD": "research signal to consider an extra allocation; no multiplier is defined in V3-016",
+    "ADD MODESTLY": "research signal to consider a smaller extra allocation; no multiplier is defined in V3-016",
+    "BASELINE": "maintain baseline allocation semantics",
+    "WAIT FOR BETTER ENTRY": "maintain baseline allocation and make no extra add; this is not a sell or underweight action"
+  }
+}
