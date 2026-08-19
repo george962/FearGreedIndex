@@ -1,6 +1,6 @@
 {
   "experiment_id": "EXP-009",
-  "status": "pre_registered_active",
+  "status": "complete_reject",
   "pre_registered_issue": 52,
   "research_cutoff": "2026-08-18",
   "feature_set_version": "v3-features-004-treasury",
@@ -48,5 +48,21 @@
   "production_policy_changed": false,
   "sizing_changed": false,
   "tuning_after_result_allowed_under_same_version": false,
-  "evidence": {}
+  "result": {
+    "decision": "DO_NOT_ADVANCE_RECENT_WINDOW_UNDER_EXP_009",
+    "experiment_viability_pass": false,
+    "mean_relative_brier_improvement": -0.17261529368598802,
+    "positive_relative_brier_folds": 0,
+    "mean_roc_auc": 0.463160875954451,
+    "positive_auc_folds": 1,
+    "minimum_fold_roc_auc": 0.3883426966292135,
+    "mean_brier_improvement_vs_full_history": -0.019962240676940097,
+    "mean_auc_improvement_vs_full_history": 0.10708803619774794,
+    "brier_better_than_full_history_folds": 0,
+    "auc_better_than_full_history_folds": 2
+  },
+  "evidence": {
+    "v3/reports/exp009_evaluation.json": "03a73e35c49b4140568a95f6f5d804900e558877a3c27f67e2bfa19f958c6ede",
+    "v3/reports/exp009_metrics.csv": "cda7d7150da7d7e02665810d64454c4598ac707310d364162b67bbea85085128"
+  }
 }
