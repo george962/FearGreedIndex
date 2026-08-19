@@ -6,8 +6,10 @@ from __future__ import annotations
 import argparse
 import json
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -41,10 +43,25 @@ from v3.features.build_treasury_features import run_build as build_treasury_feat
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_BASE_FEATURES = ROOT / "v3" / "data" / "features_daily.parquet"
+MARKET_TIMEZONE = ZoneInfo("America/New_York")
 
 
 def _registry_payload(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def current_market_date() -> str:
+    return datetime.now(MARKET_TIMEZONE).date().isoformat()
+
+
+def classify_collection_date(decision_date: str, collection_date: str) -> str:
+    decision = pd.Timestamp(decision_date).normalize()
+    collection = pd.Timestamp(collection_date).normalize()
+    if decision > collection:
+        raise ValueError("Latest decision date is later than the collector market date")
+    if decision < collection:
+        return "MISSED"
+    return "ELIGIBLE"
 
 
 def build_current_base_features(
@@ -84,6 +101,7 @@ def collect_latest_forward_evidence(
     fear_greed_path: Path = DEFAULT_FG,
     market_path: Path = DEFAULT_MARKET,
     base_registry_path: Path = BASE_REGISTRY,
+    collection_date: str | None = None,
 ) -> dict[str, Any]:
     manifest = load_manifest(manifest_path)
 
@@ -114,6 +132,29 @@ def collect_latest_forward_evidence(
             "lane": report,
         }
 
+    actual_collection_date = collection_date or current_market_date()
+    collection_policy = classify_collection_date(decision_date, actual_collection_date)
+    if collection_policy == "MISSED":
+        # Never reconstruct a past decision using data captured later. The gap is
+        # intentional evidence that the point-in-time collection was missed.
+        lane = verify_lane(
+            manifest_path=manifest_path,
+            registry_path=registry_path,
+            ledger_path=ledger_path,
+            checkpoints_path=checkpoints_path,
+            treasury_forward_source_path=forward_treasury_path,
+            treasury_frozen_source_path=frozen_treasury_path,
+        )
+        return {
+            "status": "MISSED_DECISION_NOT_BACKFILLED",
+            "decision_date": decision_date,
+            "collection_date": actual_collection_date,
+            "treasury_observations_appended": 0,
+            "feature_ledger_action": "NONE",
+            "lane": lane,
+            "note": "The collector ran after the decision date; untouched evidence is left as a gap instead of reconstructed with hindsight.",
+        }
+
     _, feature_names = load_registry(registry_path, manifest)
     existing_rows = read_ledger(ledger_path, feature_names)
     if existing_rows:
@@ -135,6 +176,7 @@ def collect_latest_forward_evidence(
             return {
                 "status": "PASS",
                 "decision_date": decision_date,
+                "collection_date": actual_collection_date,
                 "treasury_observations_appended": 0,
                 "feature_ledger_action": "IDEMPOTENT",
                 "lane": lane,
@@ -142,7 +184,7 @@ def collect_latest_forward_evidence(
             }
 
     treasury_appended = collect_forward_treasury(
-        capture_date=decision_date,
+        capture_date=actual_collection_date,
         frozen_source_path=frozen_treasury_path,
         forward_source_path=forward_treasury_path,
         manifest_path=manifest_path,
@@ -188,10 +230,11 @@ def collect_latest_forward_evidence(
     return {
         "status": "PASS",
         "decision_date": decision_date,
+        "collection_date": actual_collection_date,
         "treasury_observations_appended": treasury_appended,
         "feature_ledger_action": action,
         "lane": lane,
-        "note": "Only the latest observable decision date is sealed. Missed dates are never backfilled.",
+        "note": "Only the current New York decision date is sealable. Missed dates are never backfilled.",
     }
 
 
