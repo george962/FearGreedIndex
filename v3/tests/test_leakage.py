@@ -63,6 +63,20 @@ class LeakageValidationTests(unittest.TestCase):
         self.assertEqual(report["status"], "FAIL")
         self.assertTrue(any("future Fear & Greed" in error for error in report["errors"]))
 
+    def test_future_vix_source_date_fails(self) -> None:
+        features = pd.DataFrame(
+            {
+                "decision_date": pd.to_datetime(["2024-01-02", "2024-01-03"]),
+                "fear_greed_date": pd.to_datetime(["2024-01-02", "2024-01-03"]),
+                "vix_date": pd.to_datetime(["2024-01-03", "2024-01-03"]),
+                "fear_greed": [30.0, 40.0],
+                "vix_level": [15.0, 16.0],
+            }
+        )
+        report = validate_frames(features, self._valid_labels())
+        self.assertEqual(report["status"], "FAIL")
+        self.assertTrue(any("future VIX" in error for error in report["errors"]))
+
     def test_same_day_entry_fails(self) -> None:
         labels = self._valid_labels()
         labels.loc[0, "entry_date"] = labels.loc[0, "decision_date"]
