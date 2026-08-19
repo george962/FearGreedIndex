@@ -9,6 +9,7 @@ on:
       - "v3/evaluation/build_champion_gate_manifest.py"
       - "v3/ci/run_champion_gate_stage.py"
       - "v3/tests/test_champion_gates.py"
+      - "v3/tests/test_current_champion_evidence.py"
       - ".github/workflows/v3_champion_gates_pr_validation.yml"
 
 permissions:
@@ -40,7 +41,10 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Run V3-018 gate tests
-        run: python -m unittest -v v3.tests.test_champion_gates
+        run: |
+          python -m unittest -v \
+            v3.tests.test_champion_gates \
+            v3.tests.test_current_champion_evidence
 
       - name: Evaluate current retained candidate
         run: python -m v3.ci.run_champion_gate_stage
