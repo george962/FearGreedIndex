@@ -1,0 +1,45 @@
+name: Validate V3 Decision Policy
+
+on:
+  pull_request:
+    paths:
+      - "v3/policy/**"
+      - "v3/tests/test_decision_policy.py"
+      - ".github/workflows/v3_policy_validation.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fear-greed-v3-policy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate_policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Run policy tests
+        run: python -m unittest -v v3.tests.test_decision_policy
+      - name: Build immutable policy manifest
+        run: python v3/policy/build_policy_manifest.py
+      - name: Verify frozen v2.1 baseline remains unchanged
+        run: |
+          python v3/baseline/freeze_v2_1.py
+          git diff --exit-code -- reports/baseline_v2_1/
+      - name: Upload policy evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: v3-policy-${{ github.run_id }}
+          path: v3/reports/decision_policy_manifest.json
+          retention-days: 90
