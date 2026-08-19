@@ -1,0 +1,12 @@
+{
+  "sizing_version": "v3-sizing-policy-001",
+  "status": "blocked_pending_prediction_promotion",
+  "baseline_multiplier": 1.0,
+  "strong_add_multiplier": 1.1,
+  "minimum_multiplier": 1.0,
+  "maximum_multiplier": 1.1,
+  "eligible_action": "STRONG ADD",
+  "requires_promotion_ready_prediction": true,
+  "larger_sizing_allowed": false,
+  "underweight_allowed": false
+}

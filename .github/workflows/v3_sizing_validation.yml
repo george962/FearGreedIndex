@@ -1,0 +1,42 @@
+name: Validate V3 Minimal Sizing
+
+on:
+  pull_request:
+    paths:
+      - "v3/policy/sizing_v1.json"
+      - "v3/policy/sizing_policy.py"
+      - "v3/policy/build_sizing_manifest.py"
+      - "v3/tests/test_sizing_policy.py"
+      - ".github/workflows/v3_sizing_validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate_sizing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Run sizing tests
+        run: python -m unittest -v v3.tests.test_sizing_policy
+      - name: Build sizing manifest
+        run: python v3/policy/build_sizing_manifest.py
+      - name: Verify frozen v2.1 baseline
+        run: |
+          python v3/baseline/freeze_v2_1.py
+          git diff --exit-code -- reports/baseline_v2_1/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v3-sizing-${{ github.run_id }}
+          path: v3/reports/sizing_policy_manifest.json
+          retention-days: 90
