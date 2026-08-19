@@ -24,7 +24,8 @@
 | V3-015C 76-feature combined stack | COMPLETE — REJECT | repaired/current-code rerun in PR #41; `1/3` robust lanes |
 | V3-016 Prediction-to-action policy | COMPLETE | `v3-decision-policy-001`; research-only, deterministic, no sizing/sell semantics |
 | V3-017 Minimal sizing layer | IMPLEMENTED / ACTIVATION BLOCKED | `v3-sizing-policy-001`; current multiplier remains `1.00x`; `1.10x` requires promotion-ready prediction |
-| V3-018 Champion acceptance gates | COMPLETE — CURRENT CANDIDATE NOT PROMOTION READY | `v3-champion-gates-001`; fail-closed; `UST-EXP-004` fails prediction prerequisite; V3-019 ineligible |
+| V3-018 Champion acceptance gates | COMPLETE — CURRENT CANDIDATE NOT PROMOTION READY | PR #43, `v3-champion-gates-001`; fail-closed; `UST-EXP-004` fails prediction prerequisite; V3-019 ineligible |
+| EXP-005 Chronologically calibrated ExtraTrees | COMPLETE — REJECT | PR #45; calibration improved materially but absolute prediction gate still fails; no post-result tuning |
 
 ## Blocked / deferred
 
@@ -36,26 +37,28 @@
 ## Current evidence summary
 
 - PR #41 repaired historical V3 repository state and reran V3-013, V3-015A/B/C, V3-016, and V3-017 under current code using the frozen `2026-08-18` research cutoff.
-- The rerun passed the full V3 test suite, matched realized-date samples, reproduced the frozen v2.1 benchmark, and removed leaked temporary write-enabled finalizers.
+- The repair rerun passed the full V3 test suite, matched realized-date samples, reproduced the frozen v2.1 benchmark, and removed leaked temporary write-enabled finalizers.
 - Corrected feature-family decisions are:
   - VIX: **REJECT** (`0/3` robust lanes).
   - QQQ/SPY relative strength: **REJECT** (`1/3`).
   - Treasury: **KEEP** (`2/3`).
   - Broad dollar: **REJECT** (`1/3`).
   - 76-feature combined stack: **REJECT** (`1/3`).
-- Treasury is the only later feature family retained. `UST-EXP-004` is the strongest retained full research candidate in its direct ablation tournament.
-- V3-018 uses immutable `v3-champion-gates-001`, pre-registered in issue #42 before the repaired candidate was evaluated.
-- `UST-EXP-004` is tied to `v3-features-004-treasury`, `random_forest_v1`, immutable training protocol `EXP-004`, and `v3-labels-001`.
-- `UST-EXP-004` fails the pre-existing absolute prediction-readiness prerequisite, so V3-018 records **`NOT_PROMOTION_READY`**.
-- Because prediction readiness fails, sizing-dependent champion evidence is not fabricated: calibration/portfolio/cross-year/risk/cost/perturbation promotion gates remain BLOCKED for this candidate.
-- V3-017 remains hard-gated at **1.00x**.
-- No champion has been selected; `v3_019_eligible = false`.
-- Immutable repaired evidence is summarized in `v3/reports/integrity_rebuild_summary.json`; V3-018 evidence is preserved in the `champion_*` reports and checkpoint.
+- Treasury remains the only later feature family retained.
+- PR #43 completed V3-018 using immutable `v3-champion-gates-001`, pre-registered before the repaired candidate was evaluated. `UST-EXP-004` is **NOT_PROMOTION_READY** and V3-019 remains blocked.
+- EXP-005 tested a fixed, pre-registered `extra_trees_calibrated_v1` model on the same 53-feature Treasury lane and frozen samples.
+- EXP-005 materially improved probability calibration versus `UST-EXP-004`: mean Brier improved from about `0.2249` to `0.1996`, and mean ECE from about `0.1805` to `0.1096`.
+- That improvement is not enough: mean relative Brier improvement remains negative (`-0.0985`), with zero positive relative-Brier folds; mean return Spearman remains negative (`-0.0782`); mean drawdown Spearman remains negative (`-0.0354`).
+- EXP-005 therefore fails the unchanged absolute prediction prerequisite even though it ranks first in its comparison tournament. Rank remains separate from promotion readiness.
+- EXP-005 is frozen as a negative experiment; its registered parameters must not be tuned post hoc under the same experiment/version.
+- V3-017 remains hard-gated at **1.00x**. No champion has been selected; `v3_019_eligible = false`.
+- Immutable repaired evidence is summarized in `v3/reports/integrity_rebuild_summary.json`; V3-018 evidence is preserved in the `champion_*` reports; EXP-005 evidence is preserved in `exp005_*` reports and `v3/experiments/EXP-005/manifest.json`.
 
 ## Next
 
-1. Do **not** proceed to V3-019 with the current candidate; zero candidates pass V3-018.
-2. Resume research at the prediction layer using only legitimate, independently testable additions or model improvements; do not weaken `v3-champion-gates-001`.
-3. V3-014 breadth may resume only when a point-in-time historical source satisfies issue #31.
-4. V3-015 credit spreads may resume only with a compliant point-in-time source/license.
-5. When a future candidate passes the existing prediction prerequisite, generate the previously blocked V3-018 calibration/portfolio/cost/perturbation evidence under the frozen gate version and reevaluate it.
+1. Do **not** proceed to V3-019; zero candidates pass V3-018.
+2. Any next prediction experiment must use a new experiment/version and a genuinely different formulation rather than tuning EXP-005 after seeing its result.
+3. Prioritize the remaining absolute prediction failures: classification must beat the base rate robustly, while return and drawdown rank correlations must become positive and robust across chronological folds.
+4. V3-014 breadth may resume only when a point-in-time historical source satisfies issue #31.
+5. V3-015 credit spreads may resume only with a compliant point-in-time source/license.
+6. Only when a future candidate passes the existing prediction prerequisite should the previously blocked V3-018 portfolio/cost/perturbation evidence be generated and evaluated.
