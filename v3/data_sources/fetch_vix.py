@@ -4,6 +4,10 @@
 The normalized snapshot intentionally keeps only the fields required by V3-011:
 trading date and the published VIX close. The checked-in snapshot, not a live
 network call, is the reproducible input used by later model experiments.
+
+The default research snapshot starts in 2019. That provides substantially more
+than the 252-trading-session warmup required before the v3 sample begins in 2021,
+without checking thousands of unused pre-sample rows into the repository.
 """
 
 from __future__ import annotations
@@ -24,11 +28,13 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT = ROOT / "v3" / "data" / "vix_daily.csv"
 DEFAULT_MANIFEST = ROOT / "v3" / "data" / "vix_source.json"
 DEFAULT_SOURCE_URL = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
+DEFAULT_SNAPSHOT_START = "2019-01-01"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-url", default=DEFAULT_SOURCE_URL)
+    parser.add_argument("--snapshot-start", default=DEFAULT_SNAPSHOT_START)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--manifest-output", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--timeout", type=float, default=30.0)
@@ -119,6 +125,15 @@ def normalize_vix_csv(payload: bytes) -> pd.DataFrame:
     return result
 
 
+def trim_snapshot(frame: pd.DataFrame, snapshot_start: str) -> pd.DataFrame:
+    cutoff = pd.Timestamp(snapshot_start).normalize()
+    trimmed = frame.loc[pd.to_datetime(frame["date"]).dt.normalize() >= cutoff].copy()
+    trimmed = trimmed.sort_values("date").reset_index(drop=True)
+    if trimmed.empty:
+        raise ValueError(f"No VIX rows remain on or after snapshot start {cutoff.date()}")
+    return trimmed
+
+
 def normalized_csv_bytes(frame: pd.DataFrame) -> bytes:
     normalized = frame.copy()
     normalized["date"] = pd.to_datetime(normalized["date"], errors="raise").dt.strftime(
@@ -138,8 +153,10 @@ def write_snapshot(
     source_url: str,
     output: Path,
     manifest_output: Path,
+    snapshot_start: str = DEFAULT_SNAPSHOT_START,
 ) -> dict[str, object]:
-    frame = normalize_vix_csv(payload)
+    complete = normalize_vix_csv(payload)
+    frame = trim_snapshot(complete, snapshot_start)
     normalized_payload = normalized_csv_bytes(frame)
 
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -152,17 +169,19 @@ def write_snapshot(
         "retrieved_utc": datetime.now(timezone.utc).isoformat(),
         "source_sha256": sha256_bytes(payload),
         "normalized_sha256": sha256_bytes(normalized_payload),
+        "snapshot_start": pd.Timestamp(snapshot_start).date().isoformat(),
         "rows": int(len(frame)),
         "start": frame["date"].min().date().isoformat(),
         "end": frame["date"].max().date().isoformat(),
         "normalized_columns": ["date", "vix_close"],
         "usage": (
-            "Research snapshot for V3-011/V3-012. Later experiments consume this "
+            "Research snapshot for V3-011/V3-012, trimmed to 2019 onward for "
+            "sufficient pre-2021 rolling warmup. Later experiments consume this "
             "checked-in normalized snapshot rather than refetching live history."
         ),
     }
     manifest_output.write_text(
-        json.dumps(manifest, indent=2, sort_keys=True),
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     return manifest
@@ -180,6 +199,7 @@ def main() -> int:
         source_url=args.source_url,
         output=args.output,
         manifest_output=args.manifest_output,
+        snapshot_start=args.snapshot_start,
     )
     print(
         f"Wrote {args.output} ({manifest['rows']} rows, "
