@@ -1,0 +1,108 @@
+name: Finalize ADAPT-001 Evidence
+
+on:
+  push:
+    branches:
+      - agent/adapt-001-long-short-consensus
+    paths:
+      - ".github/workflows/adapt001_finalize.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fear-greed-adapt001-finalize
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out experiment branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/adapt-001-long-short-consensus
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Rebuild frozen result
+        run: |
+          python -m v3.features.build_features
+          python -m v3.labels.build_labels
+          python -m v3.evaluation.validate_dataset
+          python -m v3.ci.run_treasury_feature_stage
+          python -m v3.evaluation.exp006_opportunity
+          python -m v3.evaluation.stab001_past_only
+          python -m v3.ci.check_stab001_evidence
+          python -m v3.evaluation.stab002_causal_calibration
+          python -m v3.ci.check_stab002_evidence
+          python -m v3.evaluation.adapt001_long_short_consensus
+      - name: Freeze manifest checkpoint and status
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root = Path('.')
+          manifest_path = root/'v3/methodology/ADAPT-001/manifest.json'
+          eval_path = root/'v3/reports/adapt001_evaluation.json'
+          metrics_path = root/'v3/reports/adapt001_metrics.csv'
+          daily_path = root/'v3/reports/adapt001_daily.csv'
+          checkpoint = root/'v3/checkpoints/ADAPT-001.md'
+          status_path = root/'v3/STATUS.md'
+          methodology_readme = root/'v3/methodology/README.md'
+          def sha(p): return hashlib.sha256(p.read_bytes()).hexdigest()
+          result = json.loads(eval_path.read_text())
+          manifest = json.loads(manifest_path.read_text())
+          manifest['status'] = 'complete_reject'
+          manifest['result'] = {'decision': result['decision'], 'method_viability_pass': result['method_viability_pass'], **result['viability']}
+          manifest['evidence'] = {
+            'v3/reports/adapt001_evaluation.json': sha(eval_path),
+            'v3/reports/adapt001_metrics.csv': sha(metrics_path),
+            'v3/reports/adapt001_daily.csv': sha(daily_path),
+          }
+          manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True)+'\n')
+          v = result['viability']
+          checkpoint.write_text(f'''# ADAPT-001 — Causal long/short consensus with abstention\n\n## Result\n\n**REJECT — `{result['decision']}`**\n\nThe pre-registered daily long-memory/short-memory consensus rule did not improve the STAB-001 ranking signal. It remained active on most dates but lost substantial discrimination, especially in 2025.\n\n- mean active coverage: **{v['mean_active_coverage']:.6f}**\n- minimum fold active coverage: **{v['minimum_fold_active_coverage']:.6f}**\n- mean active ROC AUC: **{v['mean_active_roc_auc']:.6f}**\n- frozen STAB-001 mean AUC: **{v['frozen_stab001_mean_roc_auc']:.6f}**\n- AUC gain vs STAB-001: **{v['mean_active_auc_gain_vs_stab001']:.6f}**\n- positive active-AUC folds: **{v['positive_active_auc_folds']}/3**\n- minimum active fold AUC: **{v['minimum_fold_active_roc_auc']:.6f}**\n- positive top-quartile-lift folds: **{v['positive_top_quartile_lift_folds']}/3**\n- mean top-quartile lift: **{v['mean_active_top_quartile_lift']:.6f}**\n\nFold active AUCs were approximately **0.510 / 0.431 / 0.560** for 2024 / 2025 / 2026 YTD. Coverage was approximately **92% / 78% / 100%**. The rule therefore did not isolate a reliably stronger subset; it was too often active while the relationship still reversed in 2025.\n\n## Interpretation\n\nDo **not** tune the 126-row window, short-memory `|rho|` threshold, consensus share, or support cutoffs under ADAPT-001. Those values were pre-registered before the result. The next priority is DATA-001: add genuinely independent historical market regimes using a separate long-history SPX/VIX/Treasury core dataset, then learn/adjudicate adaptation rules on much broader history rather than repeatedly optimizing on the already exposed 2024–2026 sample.\n\n2024–2026 YTD remain development evidence only. EVID-001 outcomes were not opened. No champion, V3-019, policy, or sizing state changed.\n''')
+          status = status_path.read_text()
+          anchor = '| STAB-002 Nested causal calibration | COMPLETE — REJECT | issue #64 / PR #65; ECE improved materially, but positive calibration slope only 1/3 folds and relative Brier remained negative |'
+          row = '| ADAPT-001 Long/short causal consensus + abstention | COMPLETE — REJECT | issue #66 / PR #67; ~90% active coverage but mean active AUC ~0.500, worse than STAB-001 ~0.573 |'
+          if row not in status:
+              status = status.replace(anchor, anchor+'\n'+row)
+          status = status.replace(
+              '3. STAB-001 and STAB-002 are frozen. Ranking improved, but causal score orientation/calibration still drift. Next test a pre-registered long-memory/short-memory consensus and abstention methodology; do not retune either stability experiment.',
+              '3. STAB-001, STAB-002, and ADAPT-001 are frozen. The first recovered ranking, but causal calibration and long/short consensus did not solve drift. Prioritize DATA-001 long-history core regime expansion before another adaptive model.'
+          )
+          status_path.write_text(status)
+          readme = methodology_readme.read_text()
+          lines = [
+              '- `STAB-001/` — past-only feature relationship stability selection before any adaptive model is trained.',
+              '- `STAB-002/` — nested causal calibration of the frozen STAB-001 ranking score.',
+              '- `ADAPT-001/` — daily long-memory/short-memory relationship consensus with abstention.',
+          ]
+          if lines[1] not in readme:
+              readme = readme.rstrip() + '\n' + lines[1] + '\n'
+          if lines[2] not in readme:
+              readme = readme.rstrip() + '\n' + lines[2] + '\n'
+          methodology_readme.write_text(readme)
+          PY
+      - name: Commit immutable evidence and remove finalizer
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f v3/reports/adapt001_evaluation.json v3/reports/adapt001_metrics.csv v3/reports/adapt001_daily.csv
+          git add v3/methodology/ADAPT-001/manifest.json v3/checkpoints/ADAPT-001.md v3/STATUS.md v3/methodology/README.md
+          git rm .github/workflows/adapt001_finalize.yml
+          git commit -m "Freeze ADAPT-001 negative evidence"
+          git push origin HEAD:agent/adapt-001-long-short-consensus
