@@ -73,6 +73,7 @@ def load_manifest(path: Path) -> dict[str, Any]:
         "feature_count",
         "collector_version",
         "forbidden_column_fragments",
+        "checkpoint_registry_version",
     }
     missing = sorted(required.difference(manifest))
     if missing:
@@ -122,6 +123,8 @@ def write_ledger(path: Path, features: list[str], rows: list[dict[str, str]]) ->
 
 
 def _normalize_date(value: Any, name: str) -> str:
+    if value is None or pd.isna(value):
+        raise ValueError(f"{name} is missing")
     stamp = pd.to_datetime(value, errors="raise")
     if isinstance(stamp, pd.DatetimeIndex):
         raise ValueError(f"{name} must be scalar")
