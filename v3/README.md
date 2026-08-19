@@ -22,12 +22,13 @@ Do not infer current research state from an old branch or individual report; rea
 - V3-001 through V3-018 are implemented; V3-019 remains blocked because no candidate passes the champion gates.
 - Treasury/yield-curve context is the only later feature family retained by repaired same-sample ablations.
 - VIX, QQQ/SPY relative strength, broad dollar, and the combined feature stack were rejected under their frozen gates.
-- EXP-005 through EXP-009 are completed negative experiments. They tested calibration, target reformulation, simple rate regime, sentiment extremes, and fixed recent-window adaptation without producing promotion-ready predictive edge.
-- The recurring finding is chronological instability rather than one clearly fixable model defect.
-- **Active work is DIAG-001:** diagnose target prevalence drift, feature distribution shift, and feature-target relationship/sign drift before training another model.
+- EXP-005 through EXP-009 are completed negative experiments. They tested calibration, target reformulation, a simple rate regime, sentiment extremes, and fixed recent-window adaptation without producing promotion-ready predictive edge.
+- DIAG-001 is complete and identifies broad conditional relationship drift: 42/53 features reverse training-to-test association sign at least once and 34/53 change test sign across research years. The Fear & Greed family is especially unstable.
+- Because DIAG-001 inspected 2024–2026 YTD outcomes, those periods are now development/research evidence for post-DIAG hypotheses, not fresh final promotion evidence.
+- **Next work is governance + methodology:** establish an untouched forward-evidence lane after the `2026-08-18` research cutoff, then test a past-only stability-selection methodology under a new pre-registration.
 - No champion is selected; V3-019 is blocked and sizing remains `1.00x`.
 
-See `STATUS.md` and issue #55 for the current diagnostic contract.
+See `STATUS.md` and `checkpoints/DIAG-001.md` for the current evidence and next-step constraints.
 
 ## Point-in-time contract
 
@@ -39,6 +40,13 @@ See `STATUS.md` and issue #55 for the current diagnostic contract.
 - 5/20/60-session outcomes include the entry session as session 1.
 - `_forward_*_known_date` fields state when each outcome becomes legally available to training.
 - Training eligibility is controlled by the outcome-known date, not merely by `decision_date`.
+
+## Evidence-use contract after DIAG-001
+
+- Research outcomes through `2026-08-18` have been inspected and may be used for development diagnostics.
+- Any feature/model rule motivated by DIAG-001 must use a new pre-registered experiment ID.
+- Historical outer-fold results from 2024–2026 YTD must not be described as untouched promotion evidence for a post-DIAG model.
+- Final promotion requires fresh evidence that did not participate in formulation, such as an explicit forward holdout after the frozen research cutoff or separately acquired unused historical data.
 
 ## Core reproducibility commands
 
