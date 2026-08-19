@@ -1,0 +1,47 @@
+{
+  "method_id": "STAB-001",
+  "status": "pre_registered",
+  "pre_registered_issue": 62,
+  "research_cutoff": "2026-08-18",
+  "feature_set_version": "v3-features-004-treasury",
+  "feature_count": 53,
+  "target_source_experiment": "EXP-006",
+  "target": "favorable_entry_20d",
+  "outer_folds": ["2024", "2025", "2026_ytd"],
+  "outer_folds_are_development_evidence_only": true,
+  "evid001_outcomes_must_remain_sealed": true,
+  "selection_contract": {
+    "chronological_blocks": 4,
+    "minimum_observed_rows_per_block": 100,
+    "minimum_majority_sign_blocks": 3,
+    "recent_block_must_agree": true,
+    "minimum_median_absolute_spearman": 0.05,
+    "weight_formula": "median_abs_spearman * sign_consistency_fraction",
+    "outer_test_performance_may_influence_selection": false,
+    "diag001_feature_list_may_be_hard_coded": false
+  },
+  "score_contract": {
+    "feature_transform": "training_empirical_percentile",
+    "center": 0.5,
+    "composite_normalization": "sum_absolute_stability_weights",
+    "probability_transform": "training_composite_score_empirical_cdf",
+    "zero_feature_fallback": "legal_training_base_rate"
+  },
+  "viability_gate": {
+    "minimum_selected_features": 3,
+    "minimum_feature_support_folds": 2,
+    "minimum_selected_families": 2,
+    "minimum_family_support_folds": 2,
+    "minimum_mean_roc_auc_exclusive": 0.52,
+    "minimum_positive_auc_folds": 2,
+    "minimum_fold_roc_auc_inclusive": 0.45,
+    "minimum_mean_relative_brier_improvement_exclusive": 0.0,
+    "minimum_positive_relative_brier_folds": 2,
+    "require_exp006_sample_hash_match": true
+  },
+  "pass_effect": "justify_pre_registration_of_EXP-010_only",
+  "champion_selected": false,
+  "v3_019_eligible": false,
+  "sizing_multiplier": 1.0,
+  "tuning_after_result_allowed_under_same_version": false
+}
