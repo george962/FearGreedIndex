@@ -1,0 +1,8 @@
+{
+  "config_sha256": "90701915f26f22d11044aa8b181a30453c20f83172855c43611a508362295c5c",
+  "engine_sha256": "17ccd3dba3f2a8112671264c653cce07f98170ec30110d848ffa208adf7c623f",
+  "gate_version": "v3-champion-gates-001",
+  "pre_registered_issue": 42,
+  "promotion_rule": "Every required gate must PASS. Missing, NaN, stale, mismatched, blocked, or failed evidence means NOT_PROMOTION_READY. Exactly one fully passing candidate is required before V3-019 may create a champion manifest.",
+  "status": "frozen_pre_registered"
+}
