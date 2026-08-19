@@ -1,0 +1,41 @@
+{
+  "as_of": "2026-08-18",
+  "champion_gate_version": "v3-champion-gates-001",
+  "champion_selected": false,
+  "current_sizing_multiplier": 1.0,
+  "dataset_sha256": "22a48c4c430259da124dc1339d655796187b617caacc485e34035733ee74b8e8",
+  "decision": "DO_NOT_ADVANCE_OPPORTUNITY_TARGET_UNDER_EXP_006",
+  "experiment_id": "EXP-006",
+  "experiment_viability_pass": false,
+  "feature_count": 53,
+  "feature_version": "v3-features-004-treasury",
+  "models": {
+    "opportunity_logistic_l2_v1": {
+      "mean_brier_score": 0.4144384441033937,
+      "mean_ece": 0.41582065302781857,
+      "mean_relative_brier_improvement": -0.6685605372964162,
+      "mean_roc_auc": 0.35229479381953804,
+      "positive_auc_folds": 0,
+      "positive_relative_brier_folds": 0,
+      "viability_gate_pass": false
+    },
+    "opportunity_random_forest_v1": {
+      "mean_brier_score": 0.2857216569670689,
+      "mean_ece": 0.22138767369330706,
+      "mean_relative_brier_improvement": -0.14783280324408685,
+      "mean_roc_auc": 0.356072839756703,
+      "positive_auc_folds": 1,
+      "positive_relative_brier_folds": 0,
+      "viability_gate_pass": false
+    }
+  },
+  "note": "EXP-006 tests target formulation only. Passing does not imply champion promotion; failing may not be followed by threshold/model tuning under EXP-006.",
+  "sample_hashes_match": true,
+  "status": "EXP_006_EVALUATION_COMPLETE",
+  "target": {
+    "drawdown_strictly_greater_than": -0.05,
+    "primary": "favorable_entry_20d",
+    "return_minimum": 0.02
+  },
+  "v3_019_eligible": false
+}
