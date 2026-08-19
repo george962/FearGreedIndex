@@ -9,6 +9,7 @@
   "ledger_version": 1,
   "collector_version": "evid001-forward-snapshot-v1",
   "checkpoint_registry_version": 1,
+  "treasury_forward_source_version": "evid001-forward-treasury-v1",
   "append_only": true,
   "store_full_feature_vector": true,
   "forbidden_column_fragments": [
@@ -31,6 +32,9 @@
     "Feature snapshots may be collected without inspecting future outcomes.",
     "No forward outcome may enter the feature ledger.",
     "Existing ledger rows may never be rewritten.",
+    "The frozen V3-015 Treasury research snapshot may never be refreshed by the forward collector.",
+    "Post-cutoff Treasury observations are stored in a separate append-only source ledger with capture dates.",
+    "A forward feature row may use only Treasury observations captured on or before its decision date.",
     "A checkpoint date range becomes research-exposed permanently when intentionally opened.",
     "Post-DIAG experiments must be pre-registered before consuming an opened checkpoint's outcomes."
   ]
