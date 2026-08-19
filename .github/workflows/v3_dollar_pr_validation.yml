@@ -37,13 +37,18 @@ jobs:
           python -m pip install -r requirements.txt
       - name: Run dollar tests
         run: python -m unittest discover -s v3/tests -p "test_dollar_*.py" -v
+      - name: Build baseline features and labels
+        run: |
+          python -m v3.features.build_features
+          python -m v3.labels.build_labels
+          python -m v3.evaluation.validate_dataset
       - name: Build and validate dollar features
-        run: python v3/ci/run_dollar_feature_stage.py
+        run: python -m v3.ci.run_dollar_feature_stage
       - name: Run fixed-as-of dollar ablation
-        run: python v3/evaluation/dollar_ablation.py
+        run: python -m v3.evaluation.dollar_ablation
       - name: Verify frozen v2.1 baseline
         run: |
-          python v3/baseline/freeze_v2_1.py
+          python -m v3.baseline.freeze_v2_1
           git diff --exit-code -- reports/baseline_v2_1/
       - name: Upload dollar evidence
         if: always()
