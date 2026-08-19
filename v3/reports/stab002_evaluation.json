@@ -1,0 +1,54 @@
+{
+  "as_of": "2026-08-18",
+  "calibration_protocol": {
+    "calibration_blocks": 3,
+    "calibration_history_rows": 240,
+    "minimum_inner_formation_rows": 400,
+    "platt_model": {
+      "C": 1.0,
+      "max_iter": 1000,
+      "random_state": 42,
+      "solver": "lbfgs"
+    },
+    "positive_slope_required": true,
+    "rows_per_block": 80
+  },
+  "champion_selected": false,
+  "current_sizing_multiplier": 1.0,
+  "dataset_sha256": "22a48c4c430259da124dc1339d655796187b617caacc485e34035733ee74b8e8",
+  "decision": "DO_NOT_ADVANCE_CAUSAL_CALIBRATION_UNDER_STAB_002",
+  "development_evidence_only": true,
+  "evid001_outcomes_opened": false,
+  "feature_count": 53,
+  "feature_version": "v3-features-004-treasury",
+  "method_id": "STAB-002",
+  "method_viability_pass": false,
+  "note": "STAB-002 changes only causal calibration of the frozen STAB-001 ranking methodology. It cannot promote a champion or change sizing, and exposed outer folds are development evidence only.",
+  "ranking_source_method": "STAB-001",
+  "research_exposed_periods": [
+    "2024",
+    "2025",
+    "2026_ytd"
+  ],
+  "status": "STAB_002_EVALUATION_COMPLETE",
+  "target": "favorable_entry_20d",
+  "target_source_experiment": "EXP-006",
+  "v3_019_eligible": false,
+  "viability": {
+    "aggregate_brier_better_than_raw_stab001": true,
+    "brier_better_than_raw_stab001_folds": 3,
+    "mean_ece_improved_vs_raw_stab001": true,
+    "mean_expected_calibration_error": 0.14033103783429915,
+    "mean_relative_brier_improvement": -0.040659512761758464,
+    "mean_roc_auc": 0.5121619248331577,
+    "minimum_fold_relative_brier_improvement": -0.12197853828527538,
+    "minimum_fold_roc_auc": 0.5,
+    "positive_auc_folds": 1,
+    "positive_platt_slope_folds": 1,
+    "positive_relative_brier_folds": 0,
+    "raw_stab001_mean_expected_calibration_error": 0.2632687488571552,
+    "sample_hashes_match_stab001": true,
+    "support_requirements_pass": false,
+    "viability_gate_pass": false
+  }
+}
