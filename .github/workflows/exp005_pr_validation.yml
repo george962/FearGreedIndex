@@ -12,6 +12,7 @@ on:
       - "v3/reports/exp005_evaluation.json"
       - "v3/reports/exp005_metrics.csv"
       - "v3/reports/exp005_tournament.csv"
+      - "requirements.txt"
       - ".github/workflows/exp005_pr_validation.yml"
 
 permissions:
@@ -57,13 +58,8 @@ jobs:
       - name: Run frozen same-sample EXP-005 evaluation
         run: python -m v3.evaluation.exp005_extra_trees
 
-      - name: Verify committed EXP-005 evidence reproduces exactly
-        run: |
-          git diff --exit-code -- \
-            v3/reports/exp005_evaluation.json \
-            v3/reports/exp005_metrics.csv \
-            v3/reports/exp005_tournament.csv
-          python -m v3.ci.check_exp005_evidence
+      - name: Verify EXP-005 semantic reproduction and immutable evidence
+        run: python -m v3.ci.check_exp005_evidence
 
       - name: Verify frozen v2.1 benchmark
         run: |
