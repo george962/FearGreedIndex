@@ -17,6 +17,7 @@ from v3.evidence.append_forward_snapshot import (
     DEFAULT_REGISTRY,
     append_snapshot,
     load_manifest,
+    load_registry,
     read_ledger,
 )
 from v3.evidence.collect_forward_treasury import (
@@ -26,19 +27,44 @@ from v3.evidence.collect_forward_treasury import (
     materialize_source_for_decision,
 )
 from v3.evidence.verify_forward_lane import DEFAULT_CHECKPOINTS, verify_lane
-from v3.features.build_features import DEFAULT_OUTPUT as BASE_FEATURES, run_build as build_base_features
+from v3.features.build_features import (
+    DEFAULT_FG,
+    DEFAULT_MARKET,
+    DEFAULT_REGISTRY as BASE_REGISTRY,
+    build_feature_frame,
+    feature_columns,
+    load_fear_greed,
+    load_market,
+    validate_registry,
+)
 from v3.features.build_treasury_features import run_build as build_treasury_features
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_BASE_REGISTRY = ROOT / "v3" / "features" / "feature_registry.json"
-DEFAULT_FAMILY_REGISTRY = ROOT / "v3" / "features" / "treasury_features.json"
+DEFAULT_BASE_FEATURES = ROOT / "v3" / "data" / "features_daily.parquet"
 
 
 def _registry_payload(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def latest_base_decision_date(base_features_path: Path = BASE_FEATURES) -> str:
+def build_current_base_features(
+    *,
+    fear_greed_path: Path = DEFAULT_FG,
+    market_path: Path = DEFAULT_MARKET,
+    registry_path: Path = BASE_REGISTRY,
+    output_path: Path = DEFAULT_BASE_FEATURES,
+) -> pd.DataFrame:
+    fear_greed = load_fear_greed(fear_greed_path)
+    market = load_market(market_path)
+    frame = build_feature_frame(fear_greed, market)
+    features = feature_columns(frame)
+    validate_registry(registry_path, features)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_parquet(output_path, index=False, engine="pyarrow")
+    return frame
+
+
+def latest_base_decision_date(base_features_path: Path = DEFAULT_BASE_FEATURES) -> str:
     frame = pd.read_parquet(base_features_path, engine="pyarrow")
     if "decision_date" not in frame.columns or frame.empty:
         raise ValueError("Base feature table has no decision dates")
@@ -54,13 +80,21 @@ def collect_latest_forward_evidence(
     checkpoints_path: Path = DEFAULT_CHECKPOINTS,
     frozen_treasury_path: Path = DEFAULT_FROZEN_SOURCE,
     forward_treasury_path: Path = DEFAULT_FORWARD_SOURCE,
-    base_features_path: Path = BASE_FEATURES,
+    base_features_path: Path = DEFAULT_BASE_FEATURES,
+    fear_greed_path: Path = DEFAULT_FG,
+    market_path: Path = DEFAULT_MARKET,
+    base_registry_path: Path = BASE_REGISTRY,
 ) -> dict[str, Any]:
     manifest = load_manifest(manifest_path)
 
-    # Rebuild only point-in-time base features. Labels/outcomes are intentionally
+    # Build only point-in-time base features. Labels/outcomes are intentionally
     # absent from the forward collection path.
-    build_base_features(output_path=base_features_path)
+    build_current_base_features(
+        fear_greed_path=fear_greed_path,
+        market_path=market_path,
+        registry_path=base_registry_path,
+        output_path=base_features_path,
+    )
     decision_date = latest_base_decision_date(base_features_path)
     cutoff = str(manifest["research_exposed_through"])
     if decision_date <= cutoff:
@@ -80,9 +114,7 @@ def collect_latest_forward_evidence(
             "lane": report,
         }
 
-    _, feature_names = __import__(
-        "v3.evidence.append_forward_snapshot", fromlist=["load_registry"]
-    ).load_registry(registry_path, manifest)
+    _, feature_names = load_registry(registry_path, manifest)
     existing_rows = read_ledger(ledger_path, feature_names)
     if existing_rows and decision_date < existing_rows[-1]["decision_date"]:
         raise ValueError("Current base feature date predates forward ledger head")
@@ -149,7 +181,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoints", type=Path, default=DEFAULT_CHECKPOINTS)
     parser.add_argument("--frozen-treasury", type=Path, default=DEFAULT_FROZEN_SOURCE)
     parser.add_argument("--forward-treasury", type=Path, default=DEFAULT_FORWARD_SOURCE)
-    parser.add_argument("--base-features", type=Path, default=BASE_FEATURES)
+    parser.add_argument("--base-features", type=Path, default=DEFAULT_BASE_FEATURES)
+    parser.add_argument("--fear-greed", type=Path, default=DEFAULT_FG)
+    parser.add_argument("--market", type=Path, default=DEFAULT_MARKET)
+    parser.add_argument("--base-registry", type=Path, default=BASE_REGISTRY)
     return parser.parse_args()
 
 
@@ -163,6 +198,9 @@ def main() -> int:
         frozen_treasury_path=args.frozen_treasury,
         forward_treasury_path=args.forward_treasury,
         base_features_path=args.base_features,
+        fear_greed_path=args.fear_greed,
+        market_path=args.market,
+        base_registry_path=args.base_registry,
     )
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0
