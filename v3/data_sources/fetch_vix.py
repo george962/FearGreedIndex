@@ -2,8 +2,8 @@
 """Fetch and normalize the first-party Cboe VIX daily-history snapshot.
 
 The normalized snapshot intentionally keeps only the fields required by V3-011:
-trading date and the published VIX close. The checked-in snapshot, not a live
-network call, is the reproducible input used by later model experiments.
+trading date and the published VIX close. The checked-in compressed snapshot,
+not a live network call, is the reproducible input used by later experiments.
 
 The default research snapshot starts in 2019. That provides substantially more
 than the 252-trading-session warmup required before the v3 sample begins in 2021,
@@ -13,6 +13,7 @@ without checking thousands of unused pre-sample rows into the repository.
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import io
 import json
@@ -25,7 +26,7 @@ from urllib.request import Request, urlopen
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_OUTPUT = ROOT / "v3" / "data" / "vix_daily.csv"
+DEFAULT_OUTPUT = ROOT / "v3" / "data" / "vix_daily.csv.gz"
 DEFAULT_MANIFEST = ROOT / "v3" / "data" / "vix_source.json"
 DEFAULT_SOURCE_URL = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
 DEFAULT_SNAPSHOT_START = "2019-01-01"
@@ -147,6 +148,11 @@ def normalized_csv_bytes(frame: pd.DataFrame) -> bytes:
     return text.encode("utf-8")
 
 
+def compressed_snapshot_bytes(normalized_payload: bytes) -> bytes:
+    """Return a deterministic gzip representation (mtime=0)."""
+    return gzip.compress(normalized_payload, compresslevel=9, mtime=0)
+
+
 def write_snapshot(
     payload: bytes,
     *,
@@ -158,10 +164,11 @@ def write_snapshot(
     complete = normalize_vix_csv(payload)
     frame = trim_snapshot(complete, snapshot_start)
     normalized_payload = normalized_csv_bytes(frame)
+    snapshot_payload = compressed_snapshot_bytes(normalized_payload)
 
     output.parent.mkdir(parents=True, exist_ok=True)
     manifest_output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_bytes(normalized_payload)
+    output.write_bytes(snapshot_payload)
 
     manifest: dict[str, object] = {
         "source": "Cboe VIX Index historical daily data",
@@ -169,6 +176,8 @@ def write_snapshot(
         "retrieved_utc": datetime.now(timezone.utc).isoformat(),
         "source_sha256": sha256_bytes(payload),
         "normalized_sha256": sha256_bytes(normalized_payload),
+        "snapshot_sha256": sha256_bytes(snapshot_payload),
+        "snapshot_format": "gzip csv; deterministic mtime=0",
         "snapshot_start": pd.Timestamp(snapshot_start).date().isoformat(),
         "rows": int(len(frame)),
         "start": frame["date"].min().date().isoformat(),
@@ -177,7 +186,7 @@ def write_snapshot(
         "usage": (
             "Research snapshot for V3-011/V3-012, trimmed to 2019 onward for "
             "sufficient pre-2021 rolling warmup. Later experiments consume this "
-            "checked-in normalized snapshot rather than refetching live history."
+            "checked-in compressed snapshot rather than refetching live history."
         ),
     }
     manifest_output.write_text(
