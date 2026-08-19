@@ -26,3 +26,4 @@ v3/reports/*.parquet
 !v3/reports/integrity_rebuild_summary.json
 !v3/reports/champion_*.json
 !v3/reports/exp*_evaluation.json
+!v3/reports/diag*_summary.json
