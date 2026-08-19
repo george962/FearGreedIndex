@@ -4,8 +4,13 @@ on:
   pull_request:
     paths:
       - "v3/evaluation/exp006_opportunity.py"
+      - "v3/ci/check_exp006_evidence.py"
       - "v3/tests/test_exp006_opportunity.py"
       - "v3/experiments/EXP-006/**"
+      - "v3/checkpoints/EXP-006.md"
+      - "v3/reports/exp006_evaluation.json"
+      - "v3/reports/exp006_metrics.csv"
+      - "v3/reports/exp006_state_distribution.csv"
       - "v3/experiments/README.md"
       - "v3/README.md"
       - "v3/STATUS.md"
@@ -55,6 +60,14 @@ jobs:
       - name: Run pre-registered EXP-006 evaluation
         run: python -m v3.evaluation.exp006_opportunity
 
+      - name: Verify committed EXP-006 evidence reproduces exactly
+        run: |
+          git diff --exit-code -- \
+            v3/reports/exp006_evaluation.json \
+            v3/reports/exp006_metrics.csv \
+            v3/reports/exp006_state_distribution.csv
+          python -m v3.ci.check_exp006_evidence
+
       - name: Verify frozen v2.1 benchmark
         run: |
           python -m v3.baseline.freeze_v2_1
@@ -72,5 +85,6 @@ jobs:
             v3/reports/exp006_predictions.parquet
             v3/experiments/EXP-006/PLAN.md
             v3/experiments/EXP-006/manifest.json
+            v3/checkpoints/EXP-006.md
           if-no-files-found: warn
           retention-days: 90
