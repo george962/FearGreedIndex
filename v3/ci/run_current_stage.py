@@ -11,24 +11,22 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from v3.evaluation.walk_forward import run_common_evaluation  # noqa: E402
+from v3.evaluation.tournament import run_tournament  # noqa: E402
 
 
 def main() -> int:
-    report = run_common_evaluation()
-    if report.get("status") != "COMMON_EVALUATION_COMPLETE":
-        raise SystemExit("V3-009 common evaluation did not complete successfully")
-    if int(report.get("metric_rows", 0)) <= 0:
-        raise SystemExit("V3-009 common evaluation generated no metrics")
+    report = run_tournament(regenerate_common_evaluation=True)
+    if report.get("status") != "TOURNAMENT_COMPLETE":
+        raise SystemExit("V3-010 tournament did not complete successfully")
     print(
         json.dumps(
             {
-                "stage": "V3-009",
+                "stage": "V3-010",
                 "status": report["status"],
-                "experiments": report["experiments"],
-                "prediction_rows": report["prediction_rows"],
-                "metric_rows": report["metric_rows"],
-                "trading_evaluation_status": report["trading_evaluation_status"],
+                "best_ranked_full_candidate": report["best_ranked_full_candidate"],
+                "promotion_ready_experiments": report["promotion_ready_experiments"],
+                "champion": report["champion"],
+                "trading_score_status": report["trading_score_status"],
             },
             indent=2,
             sort_keys=True,
