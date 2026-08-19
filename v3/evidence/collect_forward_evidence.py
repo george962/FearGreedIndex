@@ -116,8 +116,30 @@ def collect_latest_forward_evidence(
 
     _, feature_names = load_registry(registry_path, manifest)
     existing_rows = read_ledger(ledger_path, feature_names)
-    if existing_rows and decision_date < existing_rows[-1]["decision_date"]:
-        raise ValueError("Current base feature date predates forward ledger head")
+    if existing_rows:
+        ledger_head_date = existing_rows[-1]["decision_date"]
+        if decision_date < ledger_head_date:
+            raise ValueError("Current base feature date predates forward ledger head")
+        if decision_date == ledger_head_date:
+            # A sealed decision row is immutable. Do not fetch newly published
+            # same-day Treasury observations and then try to recompute it. Those
+            # observations may enter only a later decision snapshot.
+            lane = verify_lane(
+                manifest_path=manifest_path,
+                registry_path=registry_path,
+                ledger_path=ledger_path,
+                checkpoints_path=checkpoints_path,
+                treasury_forward_source_path=forward_treasury_path,
+                treasury_frozen_source_path=frozen_treasury_path,
+            )
+            return {
+                "status": "PASS",
+                "decision_date": decision_date,
+                "treasury_observations_appended": 0,
+                "feature_ledger_action": "IDEMPOTENT",
+                "lane": lane,
+                "note": "Decision date was already sealed; same-day retries never refetch or rewrite evidence.",
+            }
 
     treasury_appended = collect_forward_treasury(
         capture_date=decision_date,
