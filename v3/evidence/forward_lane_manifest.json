@@ -1,0 +1,37 @@
+{
+  "lane_id": "v3-forward-untouched-001",
+  "status": "collecting_sealed_features",
+  "governance_source": "DIAG-001",
+  "research_exposed_through": "2026-08-18",
+  "first_eligible_decision_date": "2026-08-19",
+  "feature_set_version": "v3-features-004-treasury",
+  "feature_count": 53,
+  "ledger_version": 1,
+  "collector_version": "evid001-forward-snapshot-v1",
+  "checkpoint_registry_version": 1,
+  "append_only": true,
+  "store_full_feature_vector": true,
+  "forbidden_column_fragments": [
+    "forward_return",
+    "forward_positive",
+    "max_drawdown",
+    "further_5pct_decline",
+    "known_date",
+    "realized",
+    "outcome",
+    "target",
+    "label"
+  ],
+  "promotion_effect": {
+    "champion_selected": false,
+    "v3_019_eligible": false,
+    "sizing_multiplier": 1.0
+  },
+  "rules": [
+    "Feature snapshots may be collected without inspecting future outcomes.",
+    "No forward outcome may enter the feature ledger.",
+    "Existing ledger rows may never be rewritten.",
+    "A checkpoint date range becomes research-exposed permanently when intentionally opened.",
+    "Post-DIAG experiments must be pre-registered before consuming an opened checkpoint's outcomes."
+  ]
+}
