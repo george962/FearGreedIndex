@@ -1,0 +1,72 @@
+name: Validate EXP-005 Calibrated ExtraTrees
+
+on:
+  pull_request:
+    paths:
+      - "v3/models/extra_trees_calibrated.py"
+      - "v3/evaluation/exp005_extra_trees.py"
+      - "v3/tests/test_extra_trees_calibrated.py"
+      - ".github/workflows/exp005_pr_validation.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fear-greed-exp005-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate_exp005:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out pull request
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run EXP-005 unit tests
+        run: python -m unittest -v v3.tests.test_extra_trees_calibrated
+
+      - name: Build frozen baseline data
+        run: |
+          python -m v3.features.build_features
+          python -m v3.labels.build_labels
+          python -m v3.evaluation.validate_dataset
+
+      - name: Reconstruct and validate frozen Treasury source/features
+        run: python -m v3.ci.run_treasury_feature_stage
+
+      - name: Run frozen same-sample EXP-005 evaluation
+        run: python -m v3.evaluation.exp005_extra_trees
+
+      - name: Verify frozen v2.1 benchmark
+        run: |
+          python -m v3.baseline.freeze_v2_1
+          git diff --exit-code -- reports/baseline_v2_1/
+
+      - name: Upload EXP-005 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exp005-evidence-${{ github.run_id }}
+          path: |
+            v3/reports/exp005_evaluation.json
+            v3/reports/exp005_metrics.csv
+            v3/reports/exp005_tournament.csv
+            v3/reports/exp005_predictions.parquet
+            v3/reports/exp005_existing_metrics.csv
+            v3/reports/exp005_existing_summary.json
+          if-no-files-found: warn
+          retention-days: 90
