@@ -1,0 +1,47 @@
+{
+  "ablation_as_of": "2026-08-18",
+  "ablation_version": "v3-vix-ablation-001",
+  "baseline_feature_version": "v3-features-001",
+  "baseline_frozen_dataset_sha256": "16d6528800ce12ff92b8e6e9f7ec0764450b11165baf7e14d429fde443cd96f1",
+  "best_ranked_full_candidate_in_ablation_tournament": "BASE-EXP-004",
+  "champion_selected": false,
+  "champion_selection_status": "DEFERRED_TO_V3_018_V3_019",
+  "comparison_cells": 60,
+  "feature_family_decision": {
+    "criterion": "A lane is robust only when its aggregate primary metric improves and at least 2 of 3 chronological folds improve. VIX is retained only when at least 2 of 3 lanes are robust in both EXP-003 and EXP-004.",
+    "decision": "DO_NOT_RETAIN_VIX_FEATURE_FAMILY",
+    "family_lane_robust_in_both_full_models": {
+      "classification": false,
+      "drawdown_regression": false,
+      "return_regression": false
+    },
+    "per_model_lane_robustness": {
+      "classification": {
+        "EXP-003": false,
+        "EXP-004": false
+      },
+      "drawdown_regression": {
+        "EXP-003": false,
+        "EXP-004": false
+      },
+      "return_regression": {
+        "EXP-003": false,
+        "EXP-004": false
+      }
+    },
+    "required_robust_lanes": 2,
+    "retain_vix": false,
+    "robust_lane_count": 0
+  },
+  "next": "V3-013 QQQ/SPY relative-strength features",
+  "note": "Relative VIX improvement and V3-010 absolute promotion gates are both reported, but V3-012 does not promote a model or tune a decision policy. The experiment is frozen as-of 2026-08-18; later-maturing outcomes are censored from both lanes.",
+  "promotion_ready_experiments_from_absolute_gates": [],
+  "rows": 1393,
+  "sample_hashes_match": true,
+  "status": "VIX_ABLATION_COMPLETE",
+  "trading_policy_status": "UNCHANGED_AND_DEFERRED_TO_V3_016",
+  "vix_feature_version": "v3-features-002-vix",
+  "vix_frozen_dataset_sha256": "dbe6ca9b083d880638b20eb36152cdf0351e040233f198573573993068162b96",
+  "vix_snapshot_sha256": "576fb5e5c29ea3e76bd198850118c46452dd3a0b278dca7b36651379dfd097f8",
+  "vix_source_end": "2026-08-17"
+}
