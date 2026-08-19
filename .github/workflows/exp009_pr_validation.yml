@@ -5,6 +5,7 @@ on:
     paths:
       - "v3/evaluation/exp009_recent_window.py"
       - "v3/tests/test_exp009_recent_window.py"
+      - "v3/ci/check_exp009_evidence.py"
       - "v3/experiments/EXP-009/**"
       - "v3/checkpoints/EXP-009.md"
       - "v3/reports/exp009_evaluation.json"
@@ -61,6 +62,9 @@ jobs:
       - name: Run pre-registered EXP-009 evaluation
         run: python -m v3.evaluation.exp009_recent_window
 
+      - name: Verify committed EXP-009 evidence semantically reproduces
+        run: python -m v3.ci.check_exp009_evidence
+
       - name: Verify frozen v2.1 benchmark
         run: |
           python -m v3.baseline.freeze_v2_1
@@ -77,5 +81,6 @@ jobs:
             v3/reports/exp009_predictions.parquet
             v3/experiments/EXP-009/PLAN.md
             v3/experiments/EXP-009/manifest.json
+            v3/checkpoints/EXP-009.md
           if-no-files-found: warn
           retention-days: 90
