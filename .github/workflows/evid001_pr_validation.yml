@@ -62,7 +62,7 @@ jobs:
         run: |
           set -euo pipefail
           header="$(head -n 1 v3/evidence/forward_feature_ledger.csv)"
-          if echo "$header" | grep -Eqi 'forward_return|forward_positive|max_drawdown|known_date|realized|outcome|target|label'; then
+          if echo "$header" | grep -Eqi 'forward_|max_drawdown|further_5pct_decline|known_date|realized_return|realized_pnl|realized_performance|outcome|target|label'; then
             echo "Forbidden outcome-like column found in forward ledger"
             exit 1
           fi
