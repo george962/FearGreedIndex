@@ -1,0 +1,39 @@
+{
+  "as_of": "2026-08-18",
+  "champion_gate_version": "v3-champion-gates-001",
+  "champion_selected": false,
+  "current_sizing_multiplier": 1.0,
+  "dataset_sha256": "22a48c4c430259da124dc1339d655796187b617caacc485e34035733ee74b8e8",
+  "decision": "DO_NOT_ADVANCE_SENTIMENT_EXTREMES_UNDER_EXP_008",
+  "experiment_id": "EXP-008",
+  "experiment_viability_pass": false,
+  "feature_count": 53,
+  "feature_version": "v3-features-004-treasury",
+  "note": "EXP-008 tests one fixed Fear & Greed state hypothesis with no ML model. Thresholds may not be retuned after result inspection.",
+  "sentiment_state_definition": {
+    "EXTREME_FEAR": "fear_greed <= 25",
+    "EXTREME_GREED": "fear_greed >= 75",
+    "NEUTRAL_RANGE": "25 < fear_greed < 75"
+  },
+  "sentiment_state_feature": "fear_greed",
+  "status": "EXP_008_EVALUATION_COMPLETE",
+  "target_source_experiment": "EXP-006",
+  "training_prevalence_ordering_by_fold": [
+    "NOT_HYPOTHESIZED_ORDER",
+    "NOT_HYPOTHESIZED_ORDER",
+    "NOT_HYPOTHESIZED_ORDER"
+  ],
+  "v3_019_eligible": false,
+  "viability": {
+    "full_mature_test_state_coverage": true,
+    "hypothesized_prevalence_ordering_folds": 0,
+    "mean_relative_brier_improvement": -0.018732333265115027,
+    "mean_roc_auc": 0.5284956858414293,
+    "minimum_fold_roc_auc": 0.4332191780821918,
+    "positive_auc_folds": 2,
+    "positive_relative_brier_folds": 1,
+    "sample_hashes_match_exp006": true,
+    "state_training_support_pass": false,
+    "viability_gate_pass": false
+  }
+}
