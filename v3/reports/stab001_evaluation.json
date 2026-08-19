@@ -1,0 +1,41 @@
+{
+  "as_of": "2026-08-18",
+  "champion_selected": false,
+  "current_sizing_multiplier": 1.0,
+  "dataset_sha256": "22a48c4c430259da124dc1339d655796187b617caacc485e34035733ee74b8e8",
+  "decision": "DO_NOT_ADVANCE_STABILITY_SELECTOR_UNDER_STAB_001",
+  "development_evidence_only": true,
+  "evid001_outcomes_opened": false,
+  "feature_count": 53,
+  "feature_version": "v3-features-004-treasury",
+  "method_id": "STAB-001",
+  "method_viability_pass": false,
+  "note": "STAB-001 may justify EXP-010 methodology only. Its outer folds are already research-exposed after DIAG-001 and cannot serve as final champion promotion evidence.",
+  "research_exposed_periods": [
+    "2024",
+    "2025",
+    "2026_ytd"
+  ],
+  "selection_rule": {
+    "chronological_blocks": 4,
+    "minimum_majority_sign_blocks": 3,
+    "minimum_median_absolute_spearman": 0.05,
+    "minimum_observed_rows_per_block": 100,
+    "recent_block_must_agree": true
+  },
+  "status": "STAB_001_EVALUATION_COMPLETE",
+  "target": "favorable_entry_20d",
+  "target_source_experiment": "EXP-006",
+  "v3_019_eligible": false,
+  "viability": {
+    "family_support_folds": 3,
+    "mean_relative_brier_improvement": -0.24541035678933099,
+    "mean_roc_auc": 0.5732542242146176,
+    "minimum_fold_roc_auc": 0.5367492096944151,
+    "positive_auc_folds": 3,
+    "positive_relative_brier_folds": 0,
+    "sample_hashes_match_exp006": true,
+    "selection_support_folds": 3,
+    "viability_gate_pass": false
+  }
+}

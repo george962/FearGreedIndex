@@ -32,6 +32,7 @@
 | EXP-009 Fixed 504-row recent window | COMPLETE — REJECT | issue #52 / PR #54; mean AUC ~0.463, Brier worse in all 3 folds despite later-fold AUC improvement |
 | DIAG-001 Target/covariate/relationship drift | COMPLETE — DIAGNOSTIC | issue #55 / PR #56; all 53 features preserved; broad relationship drift confirmed |
 | EVID-001 Untouched post-DIAG forward evidence | COMPLETE — COLLECTION ACTIVE | issue #60 / PR #61; append-only point-in-time feature/Treasury ledgers beginning after `2026-08-18`; no outcomes open automatically |
+| STAB-001 Past-only relationship stability selection | COMPLETE — REJECT / RANKING PROMISING | issue #62 / PR #63; mean AUC ~0.573 and AUC >0.50 in 3/3 folds, but relative Brier <0 in 3/3 folds |
 
 ## Blocked / deferred
 
@@ -73,7 +74,7 @@ See `v3/experiments/README.md`, `v3/diagnostics/README.md`, and `v3/evidence/REA
 
 1. Do **not** proceed to V3-019; zero candidates pass V3-018.
 2. Do not retune EXP-005 through EXP-009 after seeing their results.
-3. Pre-register a **past-only stability-selection methodology** before training another DIAG-informed model. The selection rule must use only pre-fold training information; the exposed 2024–2026 folds are development evidence only.
+3. STAB-001 is frozen as a negative experiment with promising ranking but failed calibration. Pre-register a separate causal calibration methodology before any adaptive predictive model; do not retune STAB-001.
 4. Keep collecting EVID-001 forward snapshots without opening outcomes. Do not use the forward lane for feature/model selection until an explicit checkpoint is deliberately unsealed for a pre-registered experiment.
 5. Any feature/model rule motivated by DIAG-001 requires a new pre-registered experiment ID. Do not directly hard-code the stable-looking DIAG-001 features into production or call their exposed-fold performance unseen.
 6. Final champion promotion must eventually rely on a deliberately opened, genuinely untouched evidence checkpoint or separately acquired never-used historical data.
