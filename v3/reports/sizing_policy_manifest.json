@@ -1,0 +1,13 @@
+{
+  "baseline_multiplier": 1.0,
+  "config_sha256": "4532aba6ce62a8338798e23ebb427dcc53ff42f0cea2986ed0f7b187c478e9c6",
+  "current_candidate_activation": "BLOCKED",
+  "empirical_sizing_test_status": "DEFERRED_UNTIL_PREDICTION_PROMOTION_GATE_PASSES",
+  "engine_sha256": "1cb9f361d49df296f68d7acc90d74e142c9da25599209fd29e0c7e41041b5a33",
+  "larger_sizing_allowed": false,
+  "requires_promotion_ready_prediction": true,
+  "sizing_version": "v3-sizing-policy-001",
+  "status": "blocked_pending_prediction_promotion",
+  "strong_add_multiplier": 1.1,
+  "underweight_allowed": false
+}

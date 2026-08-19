@@ -1,0 +1,5 @@
+status=PASS
+sizing_version=v3-sizing-policy-001
+current_candidate_multiplier=1.00
+promotion_gate_required=true
+empirical_1_10x_test=BLOCKED_UNTIL_PREDICTION_PROMOTION

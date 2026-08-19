@@ -44,19 +44,20 @@ jobs:
       - name: Run Treasury unit tests
         run: python -m unittest discover -s v3/tests -p "test_treasury_*.py" -v
 
-      - name: Build and validate Treasury feature family
-        run: python v3/ci/run_treasury_feature_stage.py
-
-      - name: Run Treasury controlled ablation when implemented
+      - name: Build baseline features and labels
         run: |
-          if [ -f v3/evaluation/treasury_ablation.py ]; then
-            python v3/evaluation/treasury_ablation.py
-          else
-            echo "Treasury ablation not implemented yet."
-          fi
+          python -m v3.features.build_features
+          python -m v3.labels.build_labels
+          python -m v3.evaluation.validate_dataset
+
+      - name: Build and validate Treasury feature family
+        run: python -m v3.ci.run_treasury_feature_stage
+
+      - name: Run Treasury controlled ablation
+        run: python -m v3.evaluation.treasury_ablation
 
       - name: Freeze v2.1 baseline guard
-        run: python v3/baseline/freeze_v2_1.py
+        run: python -m v3.baseline.freeze_v2_1
 
       - name: Verify frozen baseline is reproducible
         run: git diff --exit-code -- reports/baseline_v2_1/

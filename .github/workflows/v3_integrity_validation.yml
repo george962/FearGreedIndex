@@ -1,0 +1,51 @@
+name: Validate V3 Repository Integrity
+
+on:
+  pull_request:
+    paths:
+      - ".gitignore"
+      - ".github/workflows/v3_integrity_validation.yml"
+      - "v3/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fear-greed-v3-integrity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate_integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+
+    steps:
+      - name: Check out pull request
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Rebuild and validate affected V3 checkpoints
+        run: python v3/ci/rebuild_integrity_evidence.py
+
+      - name: Upload rebuilt V3 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v3-integrity-evidence-${{ github.run_id }}
+          path: |
+            v3/data/dollar_daily.csv
+            v3/data/dollar_source.json
+            v3/reports/
+          if-no-files-found: warn
+          retention-days: 90

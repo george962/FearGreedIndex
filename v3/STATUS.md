@@ -1,6 +1,6 @@
 # FearGreedIndex v3 Status
 
-`PLAN.md` remains the authoritative roadmap. This file records execution status so the roadmap does not have to be inferred from branches or old chat history.
+`PLAN.md` remains the authoritative roadmap. This file records execution status so the roadmap does not have to be inferred from branches, stale PRs, or old chat history.
 
 ## Completed
 
@@ -16,32 +16,45 @@
 | V3-008 Random-forest benchmark | COMPLETE | PR #18, `EXP-004` |
 | V3-009 Common walk-forward evaluator | COMPLETE | PR #20, `v3-evaluator-001` |
 | V3-010 Model tournament scoreboard | COMPLETE | PR #24, `v3-tournament-001`; no promotion-ready model |
-| V3-011 VIX/volatility feature family | COMPLETE | PR #27, `v3-features-002-vix`; first-party Cboe snapshot, 8 VIX features, zero future joins/missing VIX features in the v3 sample |
-| V3-012 Controlled VIX ablation | COMPLETE | PR #28, `v3-vix-ablation-001`; frozen as-of 2026-08-18; VIX rejected by pre-registered retention gate |
+| V3-011 VIX/volatility feature family | COMPLETE | PR #27, `v3-features-002-vix`, 8 VIX features |
+| V3-012 Controlled VIX ablation | COMPLETE — REJECT | PR #28; frozen as-of 2026-08-18; `0/3` robust lanes in both full models |
+| V3-013 QQQ/SPY relative strength | COMPLETE — REJECT | repaired in PR #41; manifest-matching frozen rerun; `1/3` robust lanes |
+| V3-015A Treasury rates/yield curve | COMPLETE — KEEP | repaired/current-code rerun in PR #41; `2/3` robust lanes; `UST-EXP-004` best-ranked full candidate in this ablation |
+| V3-015B Broad U.S. dollar | COMPLETE — REJECT | repaired/current-code rerun in PR #41; `1/3` robust lanes |
+| V3-015C 76-feature combined stack | COMPLETE — REJECT | repaired/current-code rerun in PR #41; `1/3` robust lanes |
+| V3-016 Prediction-to-action policy | COMPLETE | `v3-decision-policy-001`; research-only, deterministic, no sizing/sell semantics |
+| V3-017 Minimal sizing layer | IMPLEMENTED / ACTIVATION BLOCKED | `v3-sizing-policy-001`; current multiplier remains `1.00x`; `1.10x` requires promotion-ready prediction |
+
+## Blocked / deferred
+
+- **V3-014 market breadth:** `DATA_SOURCE_BLOCKED`. Do not backfill today's constituent universe into history. Issue #31 records point-in-time source requirements.
+- **V3-015 credit spreads:** source/license gated. Do not redistribute or silently depend on restricted ICE/Moody's history without a compliant source.
 
 ## Active
 
-- No V3-011/V3-012 work remains.
-- **V3-013 — Add QQQ/SPY relative-strength features** is the next implementation task.
-
-## Next
-
-1. V3-013 — add a separately versioned QQQ/SPY relative-strength feature family with point-in-time provenance and leakage tests.
-2. Evaluate the new family with the same one-family-at-a-time discipline used for VIX before allowing it into later research.
-3. V3-014 — market breadth only after the V3-013 evidence is recorded.
+- **V3-018 — Champion acceptance gates** is active in issue #42.
+- Gate version is pre-registered as `v3-champion-gates-001` before evaluating the repaired current candidate.
+- The gate is fail-closed: missing evidence, failed prediction readiness, leakage/data-quality failure, weak calibration, weak after-cost robustness, or failed perturbation checks means `NOT_PROMOTION_READY`.
 
 ## Current evidence summary
 
-- All initial models use the same `v3-features-001` and `v3-labels-001` point-in-time contracts.
-- All initial experiments use the same 2024, 2025, and 2026 YTD chronological folds.
-- `v3-evaluator-001` verifies identical realized-date hashes within each comparable model lane.
-- `v3-tournament-001` ranks random forest (`EXP-004`) first among the original full candidates, but rank remains separate from promotion readiness.
-- **No champion has been selected.** No experiment currently passes the absolute promotion gates.
-- V3-011 added 8 VIX features as a separate `v3-features-002-vix` lane and preserved every baseline feature value exactly.
-- V3-012 was frozen as-of `2026-08-18`; later-maturing outcomes are censored from both comparison lanes.
-- V3-012 compared 60 identical fold/target cells and verified matching realized-date hashes between baseline and +VIX.
-- VIX did **not** pass the pre-registered retention rule: `0/3` prediction lanes were robust in both `EXP-003` and `EXP-004`.
-- In the ablation tournament, baseline random forest (`BASE-EXP-004`) remained the best-ranked full candidate; all +VIX full candidates ranked worse and none passed absolute promotion gates.
-- The VIX feature family is therefore not retained for the main research feature set. Its code/data/evidence remain available as a documented negative experiment.
-- Trading/action evaluation remains intentionally separate until the decision-policy stage.
-- The v2.1 frozen baseline uses an immutable `2026-08-18` cutoff and canonical parsed-input fingerprints, so later live data appends cannot silently change frozen outcomes.
+- The repository-integrity repair reran V3-013, V3-015A, V3-015B, V3-015C, V3-016, and V3-017 under current code using the frozen `2026-08-18` research cutoff.
+- The rerun passed the full V3 test suite, matched realized-date samples, reproduced the frozen v2.1 benchmark, and confirmed no temporary write-enabled finalizer workflows remain.
+- Corrected feature-family decisions are:
+  - VIX: **REJECT** (`0/3` robust lanes, from V3-012).
+  - QQQ/SPY relative strength: **REJECT** (`1/3`).
+  - Treasury: **KEEP** (`2/3`).
+  - Broad dollar: **REJECT** (`1/3`).
+  - 76-feature combined stack: **REJECT** (`1/3`).
+- The old V3-013 KEEP report is superseded because its candidate dataset/source lineage did not match the final frozen QQQ/SPY manifest. The manifest-matching rerun is authoritative.
+- Treasury is the only later feature family retained. `UST-EXP-004` is the strongest retained full research candidate by its direct ablation tournament, but **it is not promotion-ready**.
+- No current experiment passes the absolute prediction-promotion gate. No champion has been selected.
+- V3-016 remains model-agnostic and research-only.
+- V3-017 remains hard-gated at **1.00x**. The 1.10x research sizing path cannot activate before champion/prediction acceptance.
+- Immutable repaired evidence is summarized in `v3/reports/integrity_rebuild_summary.json` and guarded by `v3/ci/check_repository_integrity.py`.
+
+## Next
+
+1. Complete V3-018 fail-closed champion gate engine and tests using the already pre-registered thresholds in issue #42.
+2. Evaluate the strongest retained candidate without relaxing any gate after seeing the result.
+3. Only if exactly one candidate passes every V3-018 requirement may V3-019 create a champion manifest and unlock the V3-017 1.10x research sizing experiment.

@@ -1,0 +1,9 @@
+experiment_id,model_name,target_type,primary_metric,aggregate_primary_improvement,improved_folds,total_folds,robust_improvement
+EXP-001,logistic_l2_v1,classification,brier_score,0.005970168768238483,2,3,True
+EXP-002,ridge_return_v1,return_regression,spearman_rank_correlation,0.17077434188779006,3,3,True
+EXP-003,hist_gradient_boosting_v1,classification,brier_score,0.02470235485173989,2,3,True
+EXP-003,hist_gradient_boosting_v1,drawdown_regression,spearman_rank_correlation,0.008074462580616393,1,3,False
+EXP-003,hist_gradient_boosting_v1,return_regression,spearman_rank_correlation,0.12004587087397565,3,3,True
+EXP-004,random_forest_v1,classification,brier_score,-0.00047870842756243196,1,3,False
+EXP-004,random_forest_v1,drawdown_regression,spearman_rank_correlation,0.0018181319868300534,2,3,True
+EXP-004,random_forest_v1,return_regression,spearman_rank_correlation,0.07852820359771731,2,3,True

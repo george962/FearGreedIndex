@@ -1,10 +1,14 @@
-# V3-015C Combined Retained Features Checkpoint
+# V3-015C Combined Feature-Stack Checkpoint
 
 ## Status
 
-**COMPLETE — KEEP COMBINED RETAINED FEATURE SET**
+**COMPLETE — DO NOT RETAIN THE 76-FEATURE COMBINED SET**
 
-The three independently retained feature families were stacked and evaluated together before starting V3-016 decision-policy research.
+V3-015C stacked QQQ/SPY relative strength, Treasury, and broad-dollar features with the frozen baseline and evaluated the 76-feature candidate before decision-policy research.
+
+## Integrity correction
+
+The original combined KEEP conclusion depended on feature-family evidence that was not reproducibly preserved on `main`, including a V3-013 candidate built from source lineage that did not match the final frozen QQQ/SPY manifest. The repository-integrity repair reran all component ablations and this combined ablation from the frozen inputs under current code. That clean rerun is authoritative.
 
 ## Candidate
 
@@ -25,17 +29,20 @@ All component point-in-time rules remain intact, including the broad-dollar T+1 
 - Identical realized-date sample hashes required before comparison
 - Same pre-registered 2-of-3-lanes retention rule used for prior families
 
-## Result
+## Corrected result
 
-- Combined-set decision: **KEEP**
-- Robust lanes in both full-interface models: **2 / 3**
+- Combined-set decision: **REJECT**
+- Robust lanes in both full-interface models: **1 / 3**
+- Classification: not robust in both full models
+- Return regression: robust in both full models
+- Drawdown regression: not robust in both full models
 - Realized-date sample hashes: **matched**
-- Best-ranked full candidate: **combined random forest (`COMBO-EXP-004`)**
+- Best-ranked full candidate in this ablation: `COMBO-EXP-004`
 - Promotion-ready experiments: **none**
 - Champion selected: **no**
 - Trading policy changed: **no**
 
-The combined retained set is therefore the strongest current research feature configuration, but it still does not satisfy the absolute promotion gates required for champion status.
+`COMBO-EXP-004` may rank first inside this direct ablation tournament, but the feature stack fails its pre-registered retention rule and no longer represents the retained research configuration.
 
 ## Evidence
 
@@ -44,8 +51,8 @@ The combined retained set is therefore the strongest current research feature co
 - `v3/reports/retained_combined_ablation_lane_summary.csv`
 - `v3/reports/retained_combined_ablation_tournament.csv`
 - `v3/reports/retained_combined_family_context.csv`
-- `v3/reports/retained_combined_result_KEEP.txt`
+- `v3/reports/retained_combined_result_REJECT.txt`
 
 ## Roadmap implication
 
-V3-016 may now build a **research-only decision-policy interface** against the combined candidate outputs, but must not treat `COMBO-EXP-004` as a production champion. Promotion remains deferred to V3-018/V3-019.
+The strongest retained feature family is Treasury. V3-016 remains a model-agnostic research policy interface and must not bind itself to the rejected combined stack. Promotion remains deferred to V3-018/V3-019.

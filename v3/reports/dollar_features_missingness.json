@@ -1,0 +1,68 @@
+{
+  "baseline_feature_count": 41,
+  "dollar_feature_count": 11,
+  "feature_version": "v3-features-005-dollar",
+  "future_available_rows": 0,
+  "input_sha256": {
+    "baseline_features": "31948141696e451f8f69613eba3481d8b11d3e72642c1d0c13e507164d795b63",
+    "dollar_snapshot": "4f0262055d199b6be3236602031129cc067f2a6a8a2364379e326c7b6f33f4ab"
+  },
+  "missingness": {
+    "dollar_acceleration_20_vs_60": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "dollar_acceleration_5_vs_20": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "dollar_available_date": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "dollar_distance_ma_20": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "dollar_distance_ma_60": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "dollar_level": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "dollar_observation_date": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "dollar_percentile_252": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "dollar_percentile_60": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "dollar_return_1": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "dollar_return_20": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "dollar_return_5": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "dollar_return_60": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    }
+  },
+  "output_sha256": "ade4312db6d0c5991d8b8befb4774296bb82ffb1b1ffd0739ab283f475553593",
+  "rows": 1393,
+  "same_day_observation_rows": 0,
+  "total_feature_count": 52
+}

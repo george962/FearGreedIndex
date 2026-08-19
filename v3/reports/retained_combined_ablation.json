@@ -1,0 +1,49 @@
+{
+  "ablation_as_of": "2026-08-18",
+  "ablation_version": "v3-retained-combined-ablation-001",
+  "baseline_feature_version": "v3-features-001",
+  "baseline_frozen_dataset_sha256": "16d6528800ce12ff92b8e6e9f7ec0764450b11165baf7e14d429fde443cd96f1",
+  "best_ranked_full_candidate_in_ablation_tournament": "COMBO-EXP-004",
+  "candidate_feature_version": "v3-features-006-retained-combined",
+  "candidate_frozen_dataset_sha256": "d482261ffe103ac8081f13f8298a75e209e5d5f3ab58b29aa50b312215833968",
+  "champion_selected": false,
+  "champion_selection_status": "DEFERRED_TO_V3_018_V3_019",
+  "comparison_cells": 60,
+  "component_feature_versions": [
+    "v3-features-003-relative-strength",
+    "v3-features-004-treasury",
+    "v3-features-005-dollar"
+  ],
+  "feature_family_decision": {
+    "criterion": "Combined set is retained only when at least 2 of 3 lanes improve in aggregate and in >=2/3 folds in both EXP-003 and EXP-004.",
+    "decision": "DO_NOT_RETAIN_COMBINED_FEATURE_SET",
+    "family_lane_robust_in_both_full_models": {
+      "classification": false,
+      "drawdown_regression": false,
+      "return_regression": true
+    },
+    "per_model_lane_robustness": {
+      "classification": {
+        "EXP-003": true,
+        "EXP-004": false
+      },
+      "drawdown_regression": {
+        "EXP-003": true,
+        "EXP-004": false
+      },
+      "return_regression": {
+        "EXP-003": true,
+        "EXP-004": true
+      }
+    },
+    "required_robust_lanes": 2,
+    "retain_combined": false,
+    "robust_lane_count": 1
+  },
+  "next": "V3-016 decision-policy research framework",
+  "promotion_ready_experiments_from_absolute_gates": [],
+  "rows": 1393,
+  "sample_hashes_match": true,
+  "status": "RETAINED_COMBINED_ABLATION_COMPLETE",
+  "trading_policy_status": "UNCHANGED_AND_DEFERRED_TO_V3_016"
+}

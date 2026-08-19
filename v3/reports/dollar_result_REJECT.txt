@@ -1,0 +1,6 @@
+decision=DO_NOT_RETAIN_DOLLAR_FEATURE_FAMILY
+robust_lane_count=1
+sample_hashes_match=True
+best_ranked_full_candidate=USD-EXP-004
+promotion_ready=[]
+ablation_as_of=2026-08-18

@@ -1,0 +1,319 @@
+{
+  "decision_time_convention": "An observation dated T is assigned dollar_available_date=T+1 calendar day and may only join when dollar_available_date <= decision_date. This conservative lag avoids same-day publication assumptions.",
+  "features": [
+    {
+      "category": "fear_greed",
+      "dtype": "float64",
+      "name": "fear_greed",
+      "point_in_time": true
+    },
+    {
+      "category": "fear_greed",
+      "dtype": "float64",
+      "name": "fg_change_1",
+      "point_in_time": true
+    },
+    {
+      "category": "fear_greed",
+      "dtype": "float64",
+      "name": "fg_change_3",
+      "point_in_time": true
+    },
+    {
+      "category": "fear_greed",
+      "dtype": "float64",
+      "name": "fg_change_5",
+      "point_in_time": true
+    },
+    {
+      "category": "fear_greed",
+      "dtype": "float64",
+      "name": "fg_change_10",
+      "point_in_time": true
+    },
+    {
+      "category": "fear_greed",
+      "dtype": "float64",
+      "name": "fg_min_5",
+      "point_in_time": true
+    },
+    {
+      "category": "fear_greed",
+      "dtype": "float64",
+      "name": "fg_max_5",
+      "point_in_time": true
+    },
+    {
+      "category": "fear_greed",
+      "dtype": "float64",
+      "name": "fg_distance_from_min_5",
+      "point_in_time": true
+    },
+    {
+      "category": "fear_greed",
+      "dtype": "float64",
+      "name": "fg_distance_from_max_5",
+      "point_in_time": true
+    },
+    {
+      "category": "fear_greed",
+      "dtype": "float64",
+      "name": "fg_min_20",
+      "point_in_time": true
+    },
+    {
+      "category": "fear_greed",
+      "dtype": "float64",
+      "name": "fg_max_20",
+      "point_in_time": true
+    },
+    {
+      "category": "fear_greed",
+      "dtype": "float64",
+      "name": "fg_distance_from_min_20",
+      "point_in_time": true
+    },
+    {
+      "category": "fear_greed",
+      "dtype": "float64",
+      "name": "fg_distance_from_max_20",
+      "point_in_time": true
+    },
+    {
+      "category": "fear_greed",
+      "dtype": "float64",
+      "name": "fg_percentile_60",
+      "point_in_time": true
+    },
+    {
+      "category": "fear_greed",
+      "dtype": "float64",
+      "name": "fg_percentile_252",
+      "point_in_time": true
+    },
+    {
+      "category": "fear_greed",
+      "dtype": "float64",
+      "name": "fg_acceleration_1_vs_5",
+      "point_in_time": true
+    },
+    {
+      "category": "fear_greed",
+      "dtype": "float64",
+      "name": "fg_reversal_1_vs_5",
+      "point_in_time": true
+    },
+    {
+      "category": "market",
+      "dtype": "float64",
+      "name": "spx_return_1",
+      "point_in_time": true
+    },
+    {
+      "category": "market",
+      "dtype": "float64",
+      "name": "spx_return_3",
+      "point_in_time": true
+    },
+    {
+      "category": "market",
+      "dtype": "float64",
+      "name": "spx_return_5",
+      "point_in_time": true
+    },
+    {
+      "category": "market",
+      "dtype": "float64",
+      "name": "spx_return_10",
+      "point_in_time": true
+    },
+    {
+      "category": "market",
+      "dtype": "float64",
+      "name": "spx_return_20",
+      "point_in_time": true
+    },
+    {
+      "category": "market",
+      "dtype": "float64",
+      "name": "spx_return_60",
+      "point_in_time": true
+    },
+    {
+      "category": "market",
+      "dtype": "float64",
+      "name": "spx_distance_ma_20",
+      "point_in_time": true
+    },
+    {
+      "category": "market",
+      "dtype": "float64",
+      "name": "spx_distance_ma_50",
+      "point_in_time": true
+    },
+    {
+      "category": "market",
+      "dtype": "float64",
+      "name": "spx_distance_ma_200",
+      "point_in_time": true
+    },
+    {
+      "category": "market",
+      "dtype": "float64",
+      "name": "spx_distance_high_20",
+      "point_in_time": true
+    },
+    {
+      "category": "market",
+      "dtype": "float64",
+      "name": "spx_drawdown_20",
+      "point_in_time": true
+    },
+    {
+      "category": "market",
+      "dtype": "float64",
+      "name": "spx_rebound_from_low_20",
+      "point_in_time": true
+    },
+    {
+      "category": "market",
+      "dtype": "float64",
+      "name": "spx_distance_high_60",
+      "point_in_time": true
+    },
+    {
+      "category": "market",
+      "dtype": "float64",
+      "name": "spx_drawdown_60",
+      "point_in_time": true
+    },
+    {
+      "category": "market",
+      "dtype": "float64",
+      "name": "spx_rebound_from_low_60",
+      "point_in_time": true
+    },
+    {
+      "category": "market",
+      "dtype": "float64",
+      "name": "spx_distance_high_252",
+      "point_in_time": true
+    },
+    {
+      "category": "market",
+      "dtype": "float64",
+      "name": "spx_drawdown_252",
+      "point_in_time": true
+    },
+    {
+      "category": "market",
+      "dtype": "float64",
+      "name": "spx_rebound_from_low_252",
+      "point_in_time": true
+    },
+    {
+      "category": "market",
+      "dtype": "float64",
+      "name": "spx_realized_vol_5",
+      "point_in_time": true
+    },
+    {
+      "category": "market",
+      "dtype": "float64",
+      "name": "spx_realized_vol_20",
+      "point_in_time": true
+    },
+    {
+      "category": "market",
+      "dtype": "float64",
+      "name": "spx_realized_vol_60",
+      "point_in_time": true
+    },
+    {
+      "category": "interaction",
+      "dtype": "float64",
+      "name": "interaction_fg_x_drawdown_20",
+      "point_in_time": true
+    },
+    {
+      "category": "interaction",
+      "dtype": "float64",
+      "name": "interaction_fg_x_vol_20",
+      "point_in_time": true
+    },
+    {
+      "category": "interaction",
+      "dtype": "float64",
+      "name": "interaction_fg_change_5_x_spx_return_5",
+      "point_in_time": true
+    },
+    {
+      "category": "dollar",
+      "dtype": "float64",
+      "name": "dollar_level",
+      "point_in_time": true
+    },
+    {
+      "category": "dollar",
+      "dtype": "float64",
+      "name": "dollar_return_1",
+      "point_in_time": true
+    },
+    {
+      "category": "dollar",
+      "dtype": "float64",
+      "name": "dollar_return_5",
+      "point_in_time": true
+    },
+    {
+      "category": "dollar",
+      "dtype": "float64",
+      "name": "dollar_return_20",
+      "point_in_time": true
+    },
+    {
+      "category": "dollar",
+      "dtype": "float64",
+      "name": "dollar_return_60",
+      "point_in_time": true
+    },
+    {
+      "category": "dollar",
+      "dtype": "float64",
+      "name": "dollar_percentile_60",
+      "point_in_time": true
+    },
+    {
+      "category": "dollar",
+      "dtype": "float64",
+      "name": "dollar_percentile_252",
+      "point_in_time": true
+    },
+    {
+      "category": "dollar",
+      "dtype": "float64",
+      "name": "dollar_distance_ma_20",
+      "point_in_time": true
+    },
+    {
+      "category": "dollar",
+      "dtype": "float64",
+      "name": "dollar_distance_ma_60",
+      "point_in_time": true
+    },
+    {
+      "category": "dollar",
+      "dtype": "float64",
+      "name": "dollar_acceleration_5_vs_20",
+      "point_in_time": true
+    },
+    {
+      "category": "dollar",
+      "dtype": "float64",
+      "name": "dollar_acceleration_20_vs_60",
+      "point_in_time": true
+    }
+  ],
+  "parent_version": "v3-features-001",
+  "version": "v3-features-005-dollar"
+}

@@ -1,0 +1,20 @@
+{
+  "version": "v3-features-003-relative-strength",
+  "parent_version": "v3-features-001",
+  "source": "frozen QQQ/SPY daily-close snapshot",
+  "decision_time_convention": "Relative-strength features use the latest QQQ/SPY daily close dated on or before decision_date. Future source dates are forbidden.",
+  "features": [
+    {"name": "qqq_return_1", "category": "relative_strength", "dtype": "float64", "point_in_time": true},
+    {"name": "qqq_return_5", "category": "relative_strength", "dtype": "float64", "point_in_time": true},
+    {"name": "qqq_return_20", "category": "relative_strength", "dtype": "float64", "point_in_time": true},
+    {"name": "qqq_return_60", "category": "relative_strength", "dtype": "float64", "point_in_time": true},
+    {"name": "qqq_spy_relative_return_1", "category": "relative_strength", "dtype": "float64", "point_in_time": true},
+    {"name": "qqq_spy_relative_return_5", "category": "relative_strength", "dtype": "float64", "point_in_time": true},
+    {"name": "qqq_spy_relative_return_20", "category": "relative_strength", "dtype": "float64", "point_in_time": true},
+    {"name": "qqq_spy_relative_return_60", "category": "relative_strength", "dtype": "float64", "point_in_time": true},
+    {"name": "qqq_spy_ratio_distance_ma_20", "category": "relative_strength", "dtype": "float64", "point_in_time": true},
+    {"name": "qqq_spy_ratio_distance_ma_60", "category": "relative_strength", "dtype": "float64", "point_in_time": true},
+    {"name": "qqq_spy_relative_acceleration_5_vs_20", "category": "relative_strength", "dtype": "float64", "point_in_time": true},
+    {"name": "qqq_spy_relative_acceleration_20_vs_60", "category": "relative_strength", "dtype": "float64", "point_in_time": true}
+  ]
+}
