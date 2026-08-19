@@ -1,0 +1,19 @@
+{
+  "version": "v3-features-005-dollar",
+  "parent_version": "v3-features-001",
+  "source": "frozen Federal Reserve/FRED DTWEXBGS broad U.S. dollar snapshot",
+  "decision_time_convention": "An observation dated T is assigned dollar_available_date=T+1 calendar day and may only join when dollar_available_date <= decision_date. This conservative lag avoids same-day publication assumptions.",
+  "features": [
+    {"name": "dollar_level", "category": "dollar", "dtype": "float64", "point_in_time": true},
+    {"name": "dollar_return_1", "category": "dollar", "dtype": "float64", "point_in_time": true},
+    {"name": "dollar_return_5", "category": "dollar", "dtype": "float64", "point_in_time": true},
+    {"name": "dollar_return_20", "category": "dollar", "dtype": "float64", "point_in_time": true},
+    {"name": "dollar_return_60", "category": "dollar", "dtype": "float64", "point_in_time": true},
+    {"name": "dollar_percentile_60", "category": "dollar", "dtype": "float64", "point_in_time": true},
+    {"name": "dollar_percentile_252", "category": "dollar", "dtype": "float64", "point_in_time": true},
+    {"name": "dollar_distance_ma_20", "category": "dollar", "dtype": "float64", "point_in_time": true},
+    {"name": "dollar_distance_ma_60", "category": "dollar", "dtype": "float64", "point_in_time": true},
+    {"name": "dollar_acceleration_5_vs_20", "category": "dollar", "dtype": "float64", "point_in_time": true},
+    {"name": "dollar_acceleration_20_vs_60", "category": "dollar", "dtype": "float64", "point_in_time": true}
+  ]
+}
