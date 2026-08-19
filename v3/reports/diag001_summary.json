@@ -1,0 +1,43 @@
+{
+  "as_of": "2026-08-18",
+  "association_rows": 159,
+  "champion_selected": false,
+  "current_sizing_multiplier": 1.0,
+  "dataset_sha256": "22a48c4c430259da124dc1339d655796187b617caacc485e34035733ee74b8e8",
+  "diagnostic_id": "DIAG-001",
+  "feature_count": 53,
+  "feature_drift_rows": 159,
+  "feature_version": "v3-features-004-treasury",
+  "features_with_any_adjacent_test_fold_sign_transition": 34,
+  "features_with_any_training_to_test_sign_reversal": 42,
+  "folds": [
+    "2024",
+    "2025",
+    "2026_ytd"
+  ],
+  "minimum_association_rows": 20,
+  "model_fitted": false,
+  "note": "Diagnostic only. No feature/model selection is permitted from DIAG-001 without a new pre-registered experiment.",
+  "sample_hashes_match_exp006": true,
+  "stability_rows": 53,
+  "status": "DIAG_001_COMPLETE",
+  "target": "favorable_entry_20d",
+  "target_prevalence": {
+    "2024": {
+      "delta": 0.13842203548085907,
+      "test": 0.5515873015873016,
+      "training": 0.41316526610644255
+    },
+    "2025": {
+      "delta": -0.04259213250517602,
+      "test": 0.416,
+      "training": 0.458592132505176
+    },
+    "2026_ytd": {
+      "delta": -0.10276003649635035,
+      "test": 0.35036496350364965,
+      "training": 0.453125
+    }
+  },
+  "v3_019_eligible": false
+}
