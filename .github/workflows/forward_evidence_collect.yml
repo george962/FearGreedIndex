@@ -1,0 +1,98 @@
+name: Collect Untouched Forward Evidence
+
+on:
+  workflow_dispatch:
+
+  workflow_run:
+    workflows:
+      - Update Fear and Greed SPX Dataset
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fear-greed-forward-evidence
+  cancel-in-progress: false
+
+jobs:
+  collect-forward-evidence:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Record generation commit
+        shell: bash
+        run: echo "GENERATION_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run forward-evidence tests
+        run: python -m unittest -v v3.tests.test_forward_evidence
+
+      - name: Collect latest sealed evidence
+        run: python -m v3.evidence.collect_forward_evidence
+
+      - name: Verify sealed evidence
+        run: python -m v3.evidence.verify_forward_lane
+
+      - name: Commit only evidence ledgers if main is unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- \
+            v3/evidence/forward_feature_ledger.csv \
+            v3/evidence/forward_treasury_source.csv; then
+            echo "Forward evidence is already current."
+            exit 0
+          fi
+
+          # Evidence was generated using GENERATION_SHA. Never rebase those bytes
+          # onto newer code or data: if main moved while generation was running,
+          # abort and let the next workflow run regenerate from the new main.
+          git fetch origin main
+          REMOTE_SHA="$(git rev-parse origin/main)"
+          LOCAL_SHA="$(git rev-parse HEAD)"
+          if [ "$LOCAL_SHA" != "$GENERATION_SHA" ] || [ "$REMOTE_SHA" != "$GENERATION_SHA" ]; then
+            echo "main changed during evidence generation; refusing to publish stale evidence"
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add \
+            v3/evidence/forward_feature_ledger.csv \
+            v3/evidence/forward_treasury_source.csv
+
+          if git diff --cached --quiet; then
+            echo "No evidence changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Append untouched forward evidence"
+          git push origin HEAD:main

@@ -32,6 +32,12 @@
 | EXP-009 Fixed 504-row recent window | COMPLETE — REJECT | issue #52 / PR #54; mean AUC ~0.463, Brier worse in all 3 folds despite later-fold AUC improvement |
 | DIAG-001 Target/covariate/relationship drift | COMPLETE — DIAGNOSTIC | issue #55 / PR #56; all 53 features preserved; broad relationship drift confirmed |
 
+## Active
+
+| Task | Status | Purpose |
+| --- | --- | --- |
+| EVID-001 Untouched post-DIAG forward evidence | IN PROGRESS | issue #60; append-only point-in-time feature/source ledgers beginning after `2026-08-18`; no outcomes may enter automatically |
+
 ## Blocked / deferred
 
 - **V3-014 market breadth:** `DATA_SOURCE_BLOCKED`. Do not backfill today's constituent universe into history. Issue #31 records point-in-time source requirements.
@@ -50,7 +56,8 @@
 - Covariate shift is material in macro/market context. Maximum absolute standardized mean differences include roughly `1.45` for `treasury_10y_level`, `1.42` for `treasury_10y_percentile_252`, `1.06` for `treasury_2y_level`, and `1.01` for `spx_distance_ma_200`.
 - A smaller set of market-stress/position features has stable-looking directional relationships across all three exposed folds, notably `spx_distance_ma_200`, `spx_realized_vol_5`, `spx_realized_vol_20`, `spx_realized_vol_60`, and `treasury_slope_change_20`. These are **hypothesis-generation observations only**, not promotion evidence.
 - DIAG-001 inspected the 2024, 2025, and 2026 YTD outcomes. Therefore those periods are now **research-exposed** for any post-DIAG feature/model formulation. They may be used for development diagnostics, but not presented as fresh final promotion evidence for a model designed from DIAG-001.
-- A future promotion candidate requires genuinely untouched evidence, such as a forward holdout beginning after the frozen `2026-08-18` research cutoff or separately acquired historical data that has never entered the research loop.
+- EVID-001 is establishing a separate append-only post-cutoff lane. The frozen V3-015 Treasury research snapshot remains immutable; new DGS2/DGS10 observations are captured separately with capture-date provenance so later releases cannot be treated as historically known.
+- EVID-001 never backfills a missed decision date and never generates labels/outcomes. A forward date becomes research-exposed only through an explicit checkpoint-opening action.
 - V3-017 remains hard-gated at **1.00x**. No champion has been selected; `v3_019_eligible = false`.
 
 ## Repository organization
@@ -59,18 +66,19 @@
 - `STATUS.md` — current truth.
 - `experiments/EXP-XXX/` — pre-registration and immutable predictive-experiment contracts.
 - `diagnostics/` — diagnostic-only research; no model/feature selection without a later pre-registered experiment.
+- `evidence/` — sealed untouched-forward feature/source evidence and explicit unseal checkpoints.
 - `checkpoints/` — human-readable conclusions and historical repair records.
 - `reports/` — compact machine-readable evidence.
 - generated Parquet outputs remain rebuildable and normally stay out of Git.
 
-See `v3/experiments/README.md` and `v3/diagnostics/README.md` for lifecycle rules.
+See `v3/experiments/README.md`, `v3/diagnostics/README.md`, and `v3/evidence/README.md` for lifecycle rules.
 
 ## Next
 
 1. Do **not** proceed to V3-019; zero candidates pass V3-018.
 2. Do not retune EXP-005 through EXP-009 after seeing their results.
-3. Establish a **post-DIAG untouched forward-evidence lane** beginning after `2026-08-18`, with explicit rules preventing future outcomes from feeding back into research before a checkpoint is intentionally evaluated.
-4. Before training another model, test whether a **past-only stability-selection methodology** can identify relationships that remain directionally stable in the next chronological period. The selection rule must use only pre-fold training information; the already exposed 2024–2026 folds are development evidence only.
+3. Complete and validate **EVID-001** before training another DIAG-informed model.
+4. After EVID-001, pre-register a **past-only stability-selection methodology**. The selection rule must use only pre-fold training information; the exposed 2024–2026 folds are development evidence only.
 5. Any feature/model rule motivated by DIAG-001 requires a new pre-registered experiment ID. Do not directly hard-code the stable-looking DIAG-001 features into production or call their exposed-fold performance unseen.
-6. Final champion promotion must eventually rely on fresh evidence not used to formulate the post-DIAG hypothesis.
+6. Final champion promotion must eventually rely on a deliberately opened, genuinely untouched evidence checkpoint or separately acquired never-used historical data.
 7. V3-014 breadth may resume only with a valid point-in-time source; credit spreads remain license/source gated.
