@@ -1,0 +1,69 @@
+{
+  "champion_selected": false,
+  "evid001_outcomes_must_remain_sealed": true,
+  "evidence": {
+    "v3/reports/stab001_evaluation.json": "664c1ee8588f3ffffd216944aa6fe88ea64398dcddfe6406d80e02fd1578f589",
+    "v3/reports/stab001_metrics.csv": "cdaa500724f5ae8c7751986922e26341deeb6e977afb3bab23cfe3ac7a178755",
+    "v3/reports/stab001_selected_features.csv": "19fb2c23ce00ee8a43ddf1511ec9feee5d400af25af2bbabcb3251db06d29029"
+  },
+  "feature_count": 53,
+  "feature_set_version": "v3-features-004-treasury",
+  "method_id": "STAB-001",
+  "outer_folds": [
+    "2024",
+    "2025",
+    "2026_ytd"
+  ],
+  "outer_folds_are_development_evidence_only": true,
+  "pass_effect": "justify_pre_registration_of_EXP-010_only",
+  "pre_registered_issue": 62,
+  "research_cutoff": "2026-08-18",
+  "result": {
+    "decision": "DO_NOT_ADVANCE_STABILITY_SELECTOR_UNDER_STAB_001",
+    "family_support_folds": 3,
+    "mean_relative_brier_improvement": -0.24541035678933099,
+    "mean_roc_auc": 0.5732542242146176,
+    "method_viability_pass": false,
+    "minimum_fold_roc_auc": 0.5367492096944151,
+    "positive_auc_folds": 3,
+    "positive_relative_brier_folds": 0,
+    "sample_hashes_match_exp006": true,
+    "selection_support_folds": 3,
+    "viability_gate_pass": false
+  },
+  "score_contract": {
+    "center": 0.5,
+    "composite_normalization": "sum_absolute_stability_weights",
+    "feature_transform": "training_empirical_percentile",
+    "probability_transform": "training_composite_score_empirical_cdf",
+    "zero_feature_fallback": "legal_training_base_rate"
+  },
+  "selection_contract": {
+    "chronological_blocks": 4,
+    "diag001_feature_list_may_be_hard_coded": false,
+    "minimum_majority_sign_blocks": 3,
+    "minimum_median_absolute_spearman": 0.05,
+    "minimum_observed_rows_per_block": 100,
+    "outer_test_performance_may_influence_selection": false,
+    "recent_block_must_agree": true,
+    "weight_formula": "median_abs_spearman * sign_consistency_fraction"
+  },
+  "sizing_multiplier": 1.0,
+  "status": "complete_reject",
+  "target": "favorable_entry_20d",
+  "target_source_experiment": "EXP-006",
+  "tuning_after_result_allowed_under_same_version": false,
+  "v3_019_eligible": false,
+  "viability_gate": {
+    "minimum_family_support_folds": 2,
+    "minimum_feature_support_folds": 2,
+    "minimum_fold_roc_auc_inclusive": 0.45,
+    "minimum_mean_relative_brier_improvement_exclusive": 0.0,
+    "minimum_mean_roc_auc_exclusive": 0.52,
+    "minimum_positive_auc_folds": 2,
+    "minimum_positive_relative_brier_folds": 2,
+    "minimum_selected_families": 2,
+    "minimum_selected_features": 3,
+    "require_exp006_sample_hash_match": true
+  }
+}
