@@ -1,0 +1,49 @@
+{
+  "adaptation_contract": {
+    "abstention_rank": 0.5,
+    "minimum_consensus_families": 2,
+    "minimum_consensus_features": 3,
+    "minimum_consensus_weight_share": 0.6,
+    "minimum_legal_history_rows": 400,
+    "minimum_short_absolute_spearman": 0.03,
+    "minimum_short_observed_rows": 100,
+    "probability_claimed": false,
+    "short_memory_rows": 126
+  },
+  "as_of": "2026-08-18",
+  "champion_selected": false,
+  "current_sizing_multiplier": 1.0,
+  "dataset_sha256": "22a48c4c430259da124dc1339d655796187b617caacc485e34035733ee74b8e8",
+  "decision": "DO_NOT_ADVANCE_LONG_SHORT_CONSENSUS_UNDER_ADAPT_001",
+  "development_evidence_only": true,
+  "evid001_outcomes_opened": false,
+  "feature_count": 53,
+  "feature_version": "v3-features-004-treasury",
+  "long_memory_method": "STAB-001",
+  "method_id": "ADAPT-001",
+  "method_viability_pass": false,
+  "note": "ADAPT-001 tests causal selective ranking only. It may abstain when long/short relationships disagree and does not claim calibrated probabilities or promotion evidence.",
+  "research_exposed_periods": [
+    "2024",
+    "2025",
+    "2026_ytd"
+  ],
+  "status": "ADAPT_001_EVALUATION_COMPLETE",
+  "target": "favorable_entry_20d",
+  "target_source_experiment": "EXP-006",
+  "v3_019_eligible": false,
+  "viability": {
+    "active_support_pass": true,
+    "frozen_stab001_mean_roc_auc": 0.5732542242146176,
+    "mean_active_auc_gain_vs_stab001": -0.07301941524345346,
+    "mean_active_coverage": 0.9015449735449735,
+    "mean_active_roc_auc": 0.5002348089711641,
+    "mean_active_top_quartile_lift": 0.04063602788208157,
+    "minimum_fold_active_coverage": 0.784,
+    "minimum_fold_active_roc_auc": 0.4307605633802817,
+    "positive_active_auc_folds": 2,
+    "positive_top_quartile_lift_folds": 2,
+    "sample_hashes_match_stab001": true,
+    "viability_gate_pass": false
+  }
+}

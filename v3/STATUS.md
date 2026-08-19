@@ -34,6 +34,7 @@
 | EVID-001 Untouched post-DIAG forward evidence | COMPLETE — COLLECTION ACTIVE | issue #60 / PR #61; append-only point-in-time feature/Treasury ledgers beginning after `2026-08-18`; no outcomes open automatically |
 | STAB-001 Past-only relationship stability selection | COMPLETE — REJECT / RANKING PROMISING | issue #62 / PR #63; mean AUC ~0.573 and AUC >0.50 in 3/3 folds, but relative Brier <0 in 3/3 folds |
 | STAB-002 Nested causal calibration | COMPLETE — REJECT | issue #64 / PR #65; ECE improved materially, but positive calibration slope only 1/3 folds and relative Brier remained negative |
+| ADAPT-001 Long/short causal consensus + abstention | COMPLETE — REJECT | issue #66 / PR #67; ~90% active coverage but mean active AUC ~0.500, worse than STAB-001 ~0.573 |
 
 ## Blocked / deferred
 
@@ -75,7 +76,7 @@ See `v3/experiments/README.md`, `v3/diagnostics/README.md`, and `v3/evidence/REA
 
 1. Do **not** proceed to V3-019; zero candidates pass V3-018.
 2. Do not retune EXP-005 through EXP-009 after seeing their results.
-3. STAB-001 and STAB-002 are frozen. Ranking improved, but causal score orientation/calibration still drift. Next test a pre-registered long-memory/short-memory consensus and abstention methodology; do not retune either stability experiment.
+3. STAB-001, STAB-002, and ADAPT-001 are frozen. The first recovered ranking, but causal calibration and long/short consensus did not solve drift. Prioritize DATA-001 long-history core regime expansion before another adaptive model.
 4. Keep collecting EVID-001 forward snapshots without opening outcomes. Do not use the forward lane for feature/model selection until an explicit checkpoint is deliberately unsealed for a pre-registered experiment.
 5. Any feature/model rule motivated by DIAG-001 requires a new pre-registered experiment ID. Do not directly hard-code the stable-looking DIAG-001 features into production or call their exposed-fold performance unseen.
 6. Final champion promotion must eventually rely on a deliberately opened, genuinely untouched evidence checkpoint or separately acquired never-used historical data.

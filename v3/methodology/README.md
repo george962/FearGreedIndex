@@ -14,3 +14,5 @@ This directory contains pre-registered research about **how** predictive models 
 ## Current methodology
 
 - `STAB-001/` — past-only feature relationship stability selection before any adaptive model is trained.
+- `STAB-002/` — nested causal calibration of the frozen STAB-001 ranking score.
+- `ADAPT-001/` — daily long-memory/short-memory relationship consensus with abstention.
