@@ -1,58 +1,44 @@
 #!/usr/bin/env python3
-"""One-time V3-013 snapshot-integrity repair stage.
-
-This temporary stage does not run or inspect the relative-strength ablation. It
-only measures the already checked-in QQQ/SPY snapshot so its manifest can be
-made atomically consistent. It will be replaced by the strict ablation stage
-before V3-013 is merged.
-"""
+"""Run the currently implemented v3 research stage on real repository data."""
 
 from __future__ import annotations
 
-import gzip
-import hashlib
 import json
+import sys
 from pathlib import Path
 
-import pandas as pd
-
 ROOT = Path(__file__).resolve().parents[2]
-SNAPSHOT = ROOT / "v3" / "data" / "qqq_spy_daily.csv.gz"
-OUTPUT = ROOT / "v3" / "reports" / "relative_strength_snapshot_repair.json"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from v3.evaluation.relative_strength_ablation import (  # noqa: E402
+    run_relative_strength_ablation,
+)
 
 
 def main() -> int:
-    snapshot_payload = SNAPSHOT.read_bytes()
-    normalized_payload = gzip.decompress(snapshot_payload)
-    frame = pd.read_csv(SNAPSHOT)
-    required = {"date", "qqq_close", "spy_close"}
-    missing = sorted(required.difference(frame.columns))
-    if missing:
-        raise SystemExit(f"Checked-in QQQ/SPY snapshot missing columns: {missing}")
-    frame["date"] = pd.to_datetime(frame["date"], errors="raise").dt.normalize()
-    if frame.empty or frame["date"].duplicated().any():
-        raise SystemExit("Checked-in QQQ/SPY snapshot is empty or has duplicate dates")
-    if not frame["date"].is_monotonic_increasing:
-        raise SystemExit("Checked-in QQQ/SPY snapshot dates are not sorted")
-    for column in ("qqq_close", "spy_close"):
-        values = pd.to_numeric(frame[column], errors="raise")
-        if values.isna().any() or (values <= 0.0).any():
-            raise SystemExit(f"Checked-in snapshot has invalid {column} values")
-
-    report = {
-        "status": "SNAPSHOT_INTEGRITY_MEASURED",
-        "rows": int(len(frame)),
-        "start": frame["date"].min().date().isoformat(),
-        "end": frame["date"].max().date().isoformat(),
-        "normalized_sha256": hashlib.sha256(normalized_payload).hexdigest(),
-        "snapshot_sha256": hashlib.sha256(snapshot_payload).hexdigest(),
-        "normalized_columns": ["date", "qqq_close", "spy_close"],
-        "snapshot_format": "gzip csv; deterministic mtime=0 expected",
-        "note": "One-time measurement only; strict manifest enforcement returns before ablation.",
-    }
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
-    print(json.dumps(report, indent=2, sort_keys=True))
+    report = run_relative_strength_ablation()
+    if report.get("status") != "RELATIVE_STRENGTH_ABLATION_COMPLETE":
+        raise SystemExit("V3-013 relative-strength ablation did not complete")
+    decision = report["feature_family_decision"]
+    print(
+        json.dumps(
+            {
+                "stage": "V3-013",
+                "status": report["status"],
+                "feature_family_decision": decision["decision"],
+                "robust_lane_count": decision["robust_lane_count"],
+                "sample_hashes_match": report["sample_hashes_match"],
+                "best_ranked_full_candidate": report[
+                    "best_ranked_full_candidate_in_ablation_tournament"
+                ],
+                "champion_selected": report["champion_selected"],
+                "next": report["next"],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
     return 0
 
 
