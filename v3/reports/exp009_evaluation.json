@@ -1,0 +1,36 @@
+{
+  "adaptation": {
+    "selection": "most_recent_eligible_rows",
+    "window_eligible_rows": 504
+  },
+  "as_of": "2026-08-18",
+  "champion_gate_version": "v3-champion-gates-001",
+  "champion_selected": false,
+  "current_sizing_multiplier": 1.0,
+  "dataset_sha256": "22a48c4c430259da124dc1339d655796187b617caacc485e34035733ee74b8e8",
+  "decision": "DO_NOT_ADVANCE_RECENT_WINDOW_UNDER_EXP_009",
+  "experiment_id": "EXP-009",
+  "experiment_viability_pass": false,
+  "feature_count": 53,
+  "feature_version": "v3-features-004-treasury",
+  "model_name": "opportunity_random_forest_recent_504_v1",
+  "model_source_experiment": "EXP-006",
+  "note": "EXP-009 changes only training recency. Window length and RF parameters may not be retuned after result inspection under this experiment ID.",
+  "status": "EXP_009_EVALUATION_COMPLETE",
+  "target_source_experiment": "EXP-006",
+  "v3_019_eligible": false,
+  "viability": {
+    "auc_better_than_full_history_folds": 2,
+    "brier_better_than_full_history_folds": 0,
+    "exact_504_training_rows_each_fold": true,
+    "mean_auc_improvement_vs_full_history": 0.10708803619774794,
+    "mean_brier_improvement_vs_full_history": -0.019962240676940097,
+    "mean_relative_brier_improvement": -0.17261529368598802,
+    "mean_roc_auc": 0.463160875954451,
+    "minimum_fold_roc_auc": 0.3883426966292135,
+    "positive_auc_folds": 1,
+    "positive_relative_brier_folds": 0,
+    "sample_hashes_match_exp006": true,
+    "viability_gate_pass": false
+  }
+}
