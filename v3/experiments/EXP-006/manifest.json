@@ -1,0 +1,51 @@
+{
+  "experiment_id": "EXP-006",
+  "status": "pre_registered_active",
+  "pre_registered_issue": 46,
+  "research_cutoff": "2026-08-18",
+  "feature_set_version": "v3-features-004-treasury",
+  "feature_count": 53,
+  "label_source_version": "v3-labels-001",
+  "target": {
+    "primary": "favorable_entry_20d",
+    "return_minimum": 0.02,
+    "drawdown_strictly_greater_than": -0.05,
+    "ordinal_bad_return_maximum": -0.02,
+    "ordinal_bad_drawdown_maximum": -0.05,
+    "ordinal_excellent_return_minimum": 0.05,
+    "ordinal_good_return_minimum": 0.02,
+    "horizon_sessions": 20,
+    "known_date_column": "_forward_20d_known_date"
+  },
+  "models": {
+    "opportunity_logistic_l2_v1": {
+      "imputer": "median",
+      "standardize": true,
+      "C": 1.0,
+      "solver": "lbfgs",
+      "max_iter": 1000
+    },
+    "opportunity_random_forest_v1": {
+      "imputer": "median",
+      "n_estimators": 300,
+      "max_depth": 6,
+      "min_samples_leaf": 10,
+      "max_features": "sqrt",
+      "bootstrap": true,
+      "random_state": 42,
+      "n_jobs": 1
+    }
+  },
+  "viability_gate": {
+    "minimum_mean_relative_brier_improvement_exclusive": 0.0,
+    "minimum_positive_relative_brier_folds": 2,
+    "minimum_mean_roc_auc_exclusive": 0.52,
+    "minimum_positive_auc_folds": 2,
+    "require_identical_test_sample_hashes": true
+  },
+  "champion_gate_version": "v3-champion-gates-001",
+  "production_policy_changed": false,
+  "sizing_changed": false,
+  "tuning_after_result_allowed_under_same_version": false,
+  "evidence": {}
+}
