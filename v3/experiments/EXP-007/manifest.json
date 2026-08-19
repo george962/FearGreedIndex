@@ -1,6 +1,6 @@
 {
   "experiment_id": "EXP-007",
-  "status": "pre_registered_active",
+  "status": "completed_negative_experiment",
   "pre_registered_issue": 48,
   "research_cutoff": "2026-08-18",
   "feature_set_version": "v3-features-004-treasury",
@@ -26,9 +26,30 @@
     "minimum_fold_roc_auc_inclusive": 0.45,
     "require_exp006_sample_hash_match": true
   },
+  "result": {
+    "experiment_viability_pass": false,
+    "decision": "DO_NOT_ADVANCE_RATE_REGIME_UNDER_EXP_007",
+    "mean_relative_brier_improvement": -0.006275822796846496,
+    "positive_relative_brier_folds": 1,
+    "mean_roc_auc": 0.4990119071382824,
+    "positive_auc_folds": 1,
+    "minimum_fold_roc_auc": 0.4431638566912539,
+    "sample_hashes_match_exp006": true,
+    "full_mature_test_regime_coverage": true,
+    "regime_training_support_pass": true,
+    "training_prevalence_ordering_stable": false,
+    "training_prevalence_ordering_by_fold": ["FALLING_HIGHER", "FALLING_HIGHER", "RISING_HIGHER"],
+    "champion_selected": false,
+    "v3_019_eligible": false,
+    "sizing_multiplier": 1.0
+  },
   "champion_gate_version": "v3-champion-gates-001",
   "production_policy_changed": false,
   "sizing_changed": false,
   "tuning_after_result_allowed_under_same_version": false,
-  "evidence": {}
+  "evidence": {
+    "evaluation_sha256": "0f488da104d2a16aa8181880b750bbffe6aba9ca6209b467063e3c9474df2490",
+    "metrics_sha256": "8c5f247ee1a70df8fef9068bd4ad6322e162e460d4e1dbb63861da4d5f65e0d2",
+    "regime_diagnostics_sha256": "f527732d3e4055a70d757ce01b30fa35f41c90a155c0c2726b993b7147b7b5ce"
+  }
 }
