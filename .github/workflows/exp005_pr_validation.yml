@@ -5,7 +5,13 @@ on:
     paths:
       - "v3/models/extra_trees_calibrated.py"
       - "v3/evaluation/exp005_extra_trees.py"
+      - "v3/ci/check_exp005_evidence.py"
       - "v3/tests/test_extra_trees_calibrated.py"
+      - "v3/experiments/EXP-005/**"
+      - "v3/checkpoints/EXP-005.md"
+      - "v3/reports/exp005_evaluation.json"
+      - "v3/reports/exp005_metrics.csv"
+      - "v3/reports/exp005_tournament.csv"
       - ".github/workflows/exp005_pr_validation.yml"
 
 permissions:
@@ -51,6 +57,14 @@ jobs:
       - name: Run frozen same-sample EXP-005 evaluation
         run: python -m v3.evaluation.exp005_extra_trees
 
+      - name: Verify committed EXP-005 evidence reproduces exactly
+        run: |
+          git diff --exit-code -- \
+            v3/reports/exp005_evaluation.json \
+            v3/reports/exp005_metrics.csv \
+            v3/reports/exp005_tournament.csv
+          python -m v3.ci.check_exp005_evidence
+
       - name: Verify frozen v2.1 benchmark
         run: |
           python -m v3.baseline.freeze_v2_1
@@ -68,5 +82,7 @@ jobs:
             v3/reports/exp005_predictions.parquet
             v3/reports/exp005_existing_metrics.csv
             v3/reports/exp005_existing_summary.json
+            v3/experiments/EXP-005/manifest.json
+            v3/checkpoints/EXP-005.md
           if-no-files-found: warn
           retention-days: 90
