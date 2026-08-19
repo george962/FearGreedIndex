@@ -1,0 +1,29 @@
+{
+  "end": "2026-08-17",
+  "frequency": "daily business-day observations",
+  "normalized_columns": [
+    "date",
+    "dgs2",
+    "dgs10"
+  ],
+  "normalized_sha256": "2ad9f7c7285cab06de573178e36e4ffeaba8e1025b5b002be60b005a811b097f",
+  "observation_semantics": "Treasury market yields are joined by observation date at or before the end-of-day decision date; portfolio execution remains next-session open.",
+  "requested_end_inclusive": "2026-08-18",
+  "requested_start": "2019-01-01",
+  "retrieved_utc": "2026-08-19T01:25:14.422288+00:00",
+  "rows": 1907,
+  "series": [
+    "DGS2",
+    "DGS10"
+  ],
+  "snapshot_format": "gzip csv; deterministic mtime=0",
+  "snapshot_sha256": "3691f934065c24003d9ea263f098cf4821800d777960e08771bd2037a3dc6d4a",
+  "source": "Federal Reserve Board H.15 via FRED",
+  "source_sha256": {
+    "DGS10": "9b6a97e2e2cb6165dfd302216bc311897f14617f905d3b8cd6ca62239d5b3693",
+    "DGS2": "8eaebda7a94250edc9281b9cca34d43136d18f170b383de58280d1a0ee4be983"
+  },
+  "start": "2019-01-02",
+  "units": "percent",
+  "usage": "Frozen V3-015 Treasury research snapshot. Experiments consume this checked-in file rather than current FRED history."
+}
