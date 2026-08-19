@@ -5,14 +5,14 @@
     "qqq_close",
     "spy_close"
   ],
-  "normalized_sha256": "d97ec4683a10414b86ea53326d387645866d364a8e7977e3897bba7ff39ebbc2",
+  "normalized_sha256": "0700a29adb4cc0a1097fe7d679829baadc5f5ff22f63ad48edb6154d86cbae24",
   "price_field": "unadjusted daily Close",
   "requested_end_inclusive": "2026-08-18",
   "requested_start": "2019-01-01",
-  "retrieved_utc": "2026-08-19T00:51:53.538300+00:00",
-  "rows": 1921,
+  "retrieved_utc": "2026-08-19T01:05:27.343009+00:00",
+  "rows": 1917,
   "snapshot_format": "gzip csv; deterministic mtime=0",
-  "snapshot_sha256": "31325f22a3f3ac51aff234b42b3da1e72b3392b3f45b213da84925df61755510",
+  "snapshot_sha256": "f37aecaed12de2839e1716180f1c108613963530d6fb139bf177ca9e0f16a4be",
   "source": "Yahoo Finance via pinned yfinance research dependency",
   "start": "2019-01-02",
   "tickers": [
