@@ -10,6 +10,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: v3-integrity-rebuild-agent-v3-integrity-repair
+  cancel-in-progress: true
+
 jobs:
   rebuild:
     if: github.ref == 'refs/heads/agent/v3-integrity-repair'
