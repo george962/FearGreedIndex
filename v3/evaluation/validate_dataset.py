@@ -27,6 +27,10 @@ FORBIDDEN_FEATURE_TOKENS = (
     "max_drawdown_",
     "further_5pct_decline",
 )
+SOURCE_DATE_COLUMNS = (
+    ("fear_greed_date", "Fear & Greed"),
+    ("vix_date", "VIX"),
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -65,12 +69,15 @@ def validate_frames(features: pd.DataFrame, labels: pd.DataFrame) -> dict[str, o
     if forbidden_columns:
         errors.append(f"features: forward/target columns present: {forbidden_columns}")
 
-    if {"decision_date", "fear_greed_date"}.issubset(features.columns):
+    if "decision_date" in features:
         decision = pd.to_datetime(features["decision_date"], errors="coerce")
-        source = pd.to_datetime(features["fear_greed_date"], errors="coerce")
-        future_source = source.notna() & decision.notna() & source.gt(decision)
-        if future_source.any():
-            errors.append("features: future Fear & Greed source date detected")
+        for source_column, label in SOURCE_DATE_COLUMNS:
+            if source_column not in features:
+                continue
+            source = pd.to_datetime(features[source_column], errors="coerce")
+            future_source = source.notna() & decision.notna() & source.gt(decision)
+            if future_source.any():
+                errors.append(f"features: future {label} source date detected")
 
     if "entry_date" in labels:
         decision = pd.to_datetime(labels["decision_date"], errors="coerce")
@@ -106,11 +113,11 @@ def validate_frames(features: pd.DataFrame, labels: pd.DataFrame) -> dict[str, o
     if infinite_columns:
         errors.append(f"features: infinite numeric values: {infinite_columns}")
 
+    metadata_dates = {"decision_date", *(column for column, _ in SOURCE_DATE_COLUMNS)}
     high_missing = {
         column: float(features[column].isna().mean())
         for column in features.columns
-        if column not in {"decision_date", "fear_greed_date"}
-        and float(features[column].isna().mean()) > 0.80
+        if column not in metadata_dates and float(features[column].isna().mean()) > 0.80
     }
     if high_missing:
         warnings.append(f"features: >80% missing: {high_missing}")
