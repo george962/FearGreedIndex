@@ -37,6 +37,7 @@
   "gate_version": "v3-champion-gates-001",
   "immutable": true,
   "implementation_commit_sha": "25a4d8def3381e78b9cd1032e03ef29932ac73c2",
+  "integrity_guard": "v3/ci/check_exp005_evidence.py",
   "label_version": "v3-labels-001",
   "model_name": "extra_trees_calibrated_v1",
   "pre_registered_issue": 44,
