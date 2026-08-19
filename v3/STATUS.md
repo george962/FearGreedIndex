@@ -28,6 +28,7 @@
 | EXP-005 Chronologically calibrated ExtraTrees | COMPLETE — REJECT | PR #45; calibration improved materially but absolute prediction gate still fails |
 | EXP-006 Opportunity-state target reformulation | COMPLETE — REJECT | issue #46 / PR #47; stationary 20d favorable-entry target fails; strong cross-year relationship reversal |
 | EXP-007 Fixed 20-session 10Y rate regime | COMPLETE — REJECT | issue #48 / PR #49; regime-only predictor mean AUC ~0.499; training regime ordering flips by 2026 |
+| EXP-008 Fixed Fear & Greed extreme states | COMPLETE — REJECT | issue #50 / PR #51; mean AUC ~0.528 but mean relative Brier negative, minimum fold AUC ~0.433, hypothesized ordering `0/3` |
 
 ## Blocked / deferred
 
@@ -39,21 +40,14 @@
 ## Current evidence summary
 
 - PR #41 repaired historical V3 repository state and reran affected feature-family experiments under current code using the frozen `2026-08-18` research cutoff.
-- Corrected feature-family decisions are:
-  - VIX: **REJECT** (`0/3` robust lanes).
-  - QQQ/SPY relative strength: **REJECT** (`1/3`).
-  - Treasury: **KEEP** (`2/3`).
-  - Broad dollar: **REJECT** (`1/3`).
-  - 76-feature combined stack: **REJECT** (`1/3`).
-- Treasury remains the only later feature family retained.
+- Corrected feature-family decisions are VIX **REJECT**, QQQ/SPY **REJECT**, Treasury **KEEP**, broad dollar **REJECT**, and the 76-feature combined stack **REJECT**. Treasury remains the only later feature family retained.
 - PR #43 completed fail-closed V3-018 champion gates. No current candidate passes the absolute prediction prerequisite.
 - EXP-005 improved probability calibration but still had negative relative Brier improvement and negative return/drawdown rank correlations.
-- EXP-006 changed the prediction problem instead of tuning EXP-005. Its stationary 20-session favorable-entry target also fails: logistic mean relative Brier `-0.669`, mean AUC `0.352`; random forest mean relative Brier `-0.148`, mean AUC `0.356`.
-- EXP-006 nevertheless exposed severe chronological relationship instability: random-forest AUC is about `0.629` in 2024, `0.282` in 2025, and `0.157` in 2026 YTD.
-- EXP-007 then tested one fixed causal explanation before adding model complexity: rising vs falling/flat 10Y rates using `treasury_10y_change_20`.
-- That hypothesis also fails. Mean relative Brier improvement is `-0.0063`, mean AUC is `0.499`, positive AUC folds are `1/3`, and minimum fold AUC is `0.443`.
-- More importantly, the historical favorable-entry prevalence ordering itself changes from `FALLING_HIGHER` in the first two training folds to `RISING_HIGHER` by 2026. A single static rate-direction regime therefore does not explain the nonstationarity.
-- The next clean hypothesis is **time adaptation itself**: keep the EXP-006 target/features/model fixed and test a single pre-registered recent rolling training window rather than searching more regime definitions.
+- EXP-006 changed the target formulation and still failed. Its most useful result was severe chronological instability: random-forest AUC about `0.629` in 2024, `0.282` in 2025, and `0.157` in 2026 YTD.
+- EXP-007 tested one fixed 10Y rate-direction explanation. It failed with mean AUC about `0.499`, and the historical rate-regime favorable-entry ordering flipped by 2026.
+- EXP-008 tested a different structural explanation: fixed Fear & Greed states `<=25`, `25-75`, and `>=75`. It also fails. Mean relative Brier improvement is `-0.0187`, only `1/3` folds improves Brier, mean AUC is `0.5285`, minimum fold AUC is `0.4332`, and the hypothesized training ordering `EXTREME_FEAR > NEUTRAL_RANGE > EXTREME_GREED` holds in `0/3` folds.
+- EXP-008 also shows unstable realized extreme-fear outcomes: favorable-entry rate is about `83%` in 2024, `31%` in 2025, and `64%` in 2026 YTD. A static extreme-sentiment gate is therefore not supported.
+- The next clean hypothesis is **time adaptation itself**, not another static regime definition.
 - V3-017 remains hard-gated at **1.00x**. No champion has been selected; `v3_019_eligible = false`.
 
 ## Repository organization
@@ -70,9 +64,9 @@ See `v3/experiments/README.md` for the experiment lifecycle.
 ## Next
 
 1. Do **not** proceed to V3-019; zero candidates pass V3-018.
-2. Do not retune EXP-005, EXP-006, or EXP-007 after seeing their results.
-3. Use a new experiment ID to test **recent-window adaptation** directly, keeping the EXP-006 target, retained Treasury feature set, and fixed random-forest parameters unchanged.
+2. Do not retune EXP-005, EXP-006, EXP-007, or EXP-008 after seeing their results.
+3. Create a new experiment ID to test **recent-window adaptation** directly, keeping the EXP-006 target, retained Treasury feature set, and fixed random-forest parameters unchanged.
 4. Pre-register one standard rolling training length before results; do not compare multiple windows under the same experiment.
 5. Keep the same frozen cutoff, chronological test folds, realized-date sample hashes, and absolute Brier/AUC viability gates so any improvement is attributable to recency rather than changed samples or thresholds.
-6. Only if a recent-window model demonstrates robust absolute predictive edge should subsequent work revisit calibration, champion evidence, or sizing.
+6. Require the recent-window candidate to improve over the frozen full-history EXP-006 random forest as well as satisfy the absolute viability gate before considering calibration or more complex adaptation.
 7. V3-014 breadth may resume only when a point-in-time historical source satisfies issue #31; credit spreads remain license/source gated.
