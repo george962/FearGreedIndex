@@ -4,6 +4,10 @@
 The ablation changes exactly one research dimension: the feature registry/dataset.
 Model classes, hyperparameters, folds, labels, maturity gates, seeds, and common
 evaluation metrics are inherited unchanged from V3-005 through V3-010.
+
+The experiment is frozen as-of 2026-08-18. Outcomes that were not legally
+knowable by that date are censored before either lane is evaluated, so later
+live-data growth cannot retroactively change the V3-012 result.
 """
 
 from __future__ import annotations
@@ -28,11 +32,19 @@ from v3.features.build_vix_features import (
     DEFAULT_VIX as VIX_SNAPSHOT,
     run_build as build_vix_features,
 )
-from v3.models.common import DEFAULT_FEATURE_REGISTRY, DEFAULT_MODEL_DATASET
+from v3.models.common import DEFAULT_FEATURE_REGISTRY, DEFAULT_MODEL_DATASET, HORIZONS
 
 ROOT = Path(__file__).resolve().parents[2]
 VIX_SOURCE_MANIFEST = ROOT / "v3" / "data" / "vix_source.json"
-VIX_MODEL_DATASET = ROOT / "v3" / "data" / "model_dataset_vix.parquet"
+ABLATION_AS_OF = pd.Timestamp("2026-08-18")
+ABLATION_VERSION = "v3-vix-ablation-001"
+
+FROZEN_BASE_MODEL_DATASET = (
+    ROOT / "v3" / "data" / "model_dataset_ablation_asof_2026_08_18.parquet"
+)
+FROZEN_VIX_MODEL_DATASET = (
+    ROOT / "v3" / "data" / "model_dataset_vix_ablation_asof_2026_08_18.parquet"
+)
 
 BASE_PREDICTIONS = ROOT / "v3" / "reports" / "vix_ablation_baseline_predictions.parquet"
 BASE_METRICS = ROOT / "v3" / "reports" / "vix_ablation_baseline_metrics.csv"
@@ -59,7 +71,6 @@ KEY_COLUMNS = (
     "target",
     "horizon",
 )
-ABlation_VERSION = "v3-vix-ablation-001"
 
 
 def parse_args() -> argparse.Namespace:
@@ -88,8 +99,56 @@ def verify_vix_snapshot() -> dict[str, Any]:
     return manifest
 
 
-def prepare_vix_model_dataset() -> dict[str, Any]:
-    """Build +VIX features and attach the exact frozen baseline labels."""
+def freeze_model_dataset_asof(
+    frame: pd.DataFrame,
+    cutoff: pd.Timestamp | str = ABLATION_AS_OF,
+) -> pd.DataFrame:
+    """Freeze decision rows and censor labels unavailable at the experiment cutoff."""
+    cutoff_ts = pd.Timestamp(cutoff).normalize()
+    frozen = frame.copy()
+    frozen["decision_date"] = pd.to_datetime(
+        frozen["decision_date"], errors="raise"
+    ).dt.normalize()
+    frozen = frozen.loc[frozen["decision_date"].le(cutoff_ts)].copy()
+    frozen = frozen.sort_values("decision_date").reset_index(drop=True)
+
+    for horizon in HORIZONS:
+        known_column = f"_forward_{horizon}d_known_date"
+        return_column = f"forward_return_{horizon}d"
+        positive_column = f"forward_positive_{horizon}d"
+        drawdown_column = f"max_drawdown_{horizon}d"
+        required = {
+            known_column,
+            return_column,
+            positive_column,
+            drawdown_column,
+        }
+        missing = sorted(required.difference(frozen.columns))
+        if missing:
+            raise ValueError(
+                f"Model dataset missing horizon {horizon} freeze columns: {missing}"
+            )
+
+        known = pd.to_datetime(frozen[known_column], errors="coerce").dt.normalize()
+        unavailable = known.isna() | known.gt(cutoff_ts)
+        frozen[known_column] = known
+        frozen.loc[unavailable, known_column] = pd.NaT
+        frozen.loc[unavailable, return_column] = np.nan
+        frozen.loc[unavailable, drawdown_column] = np.nan
+        frozen.loc[unavailable, positive_column] = pd.NA
+
+        if horizon == 20 and "further_5pct_decline_20d" in frozen.columns:
+            frozen.loc[unavailable, "further_5pct_decline_20d"] = pd.NA
+
+    if frozen["decision_date"].duplicated().any():
+        raise ValueError("Frozen ablation dataset has duplicate decision dates")
+    if not frozen["decision_date"].is_monotonic_increasing:
+        raise ValueError("Frozen ablation dataset is not chronologically sorted")
+    return frozen
+
+
+def prepare_frozen_model_datasets() -> dict[str, Any]:
+    """Build +VIX features, preserve labels exactly, then freeze both lanes as-of."""
     source_manifest = verify_vix_snapshot()
     feature_report = build_vix_features(
         base_features_path=DEFAULT_BASE_FEATURES,
@@ -103,7 +162,8 @@ def prepare_vix_model_dataset() -> dict[str, Any]:
     vix_features = pd.read_parquet(VIX_FEATURES, engine="pyarrow")
     base_model = pd.read_parquet(DEFAULT_MODEL_DATASET, engine="pyarrow")
 
-    # The feature-family experiment may not alter baseline rows or values.
+    # V3-011/V3-012 are feature-family experiments only. Existing feature values
+    # and decision rows must remain byte-equivalent in DataFrame terms.
     assert_frame_equal(
         vix_features[base_features.columns].reset_index(drop=True),
         base_features.reset_index(drop=True),
@@ -115,28 +175,42 @@ def prepare_vix_model_dataset() -> dict[str, Any]:
     ]
     if not label_columns:
         raise ValueError("Baseline model dataset contains no label columns")
+
     vix_model = vix_features.merge(
         base_model[["decision_date", *label_columns]],
         on="decision_date",
         how="left",
         validate="one_to_one",
     )
-
-    # Stronger than merely using the same label builder: require byte-equivalent
-    # label values after normalizing row order.
     assert_frame_equal(
         vix_model[["decision_date", *label_columns]].reset_index(drop=True),
         base_model[["decision_date", *label_columns]].reset_index(drop=True),
         check_dtype=True,
     )
 
-    VIX_MODEL_DATASET.parent.mkdir(parents=True, exist_ok=True)
-    vix_model.to_parquet(VIX_MODEL_DATASET, index=False, engine="pyarrow")
+    frozen_base = freeze_model_dataset_asof(base_model, ABLATION_AS_OF)
+    frozen_vix = freeze_model_dataset_asof(vix_model, ABLATION_AS_OF)
+
+    # Re-check the label contract after censoring unknown-as-of outcomes.
+    frozen_label_columns = ["decision_date", *label_columns]
+    assert_frame_equal(
+        frozen_vix[frozen_label_columns].reset_index(drop=True),
+        frozen_base[frozen_label_columns].reset_index(drop=True),
+        check_dtype=True,
+    )
+
+    FROZEN_BASE_MODEL_DATASET.parent.mkdir(parents=True, exist_ok=True)
+    frozen_base.to_parquet(FROZEN_BASE_MODEL_DATASET, index=False, engine="pyarrow")
+    frozen_vix.to_parquet(FROZEN_VIX_MODEL_DATASET, index=False, engine="pyarrow")
+
     return {
         "source_manifest": source_manifest,
         "feature_report": feature_report,
         "label_columns": label_columns,
-        "rows": int(len(vix_model)),
+        "rows": int(len(frozen_base)),
+        "as_of": ABLATION_AS_OF.date().isoformat(),
+        "baseline_dataset_sha256": _sha256(FROZEN_BASE_MODEL_DATASET),
+        "vix_dataset_sha256": _sha256(FROZEN_VIX_MODEL_DATASET),
     }
 
 
@@ -160,19 +234,21 @@ def compare_metric_frames(
         indicator=True,
     )
     if not merged["_merge"].eq("both").all():
-        bad = merged.loc[~merged["_merge"].eq("both"), list(KEY_COLUMNS) + ["_merge"]]
-        raise ValueError(
-            "Baseline and VIX evaluation cells differ: "
-            + bad.head(10).to_dict(orient="records").__repr__()
-        )
-    if not merged["sample_sha256_baseline"].eq(merged["sample_sha256_vix"]).all():
         bad = merged.loc[
-            ~merged["sample_sha256_baseline"].eq(merged["sample_sha256_vix"]),
-            list(KEY_COLUMNS),
+            ~merged["_merge"].eq("both"), list(KEY_COLUMNS) + ["_merge"]
         ]
         raise ValueError(
+            "Baseline and VIX evaluation cells differ: "
+            + repr(bad.head(10).to_dict(orient="records"))
+        )
+    same_samples = merged["sample_sha256_baseline"].eq(
+        merged["sample_sha256_vix"]
+    )
+    if not same_samples.all():
+        bad = merged.loc[~same_samples, list(KEY_COLUMNS)]
+        raise ValueError(
             "Baseline and VIX metrics use different realized-date samples: "
-            + bad.head(10).to_dict(orient="records").__repr__()
+            + repr(bad.head(10).to_dict(orient="records"))
         )
 
     rows: list[dict[str, Any]] = []
@@ -232,7 +308,9 @@ def summarize_lane_improvements(comparison: pd.DataFrame) -> pd.DataFrame:
                 "model_name": model_name,
                 "target_type": target_type,
                 "fold": fold,
-                "fold_primary_improvement": float(group["primary_improvement"].mean()),
+                "fold_primary_improvement": float(
+                    group["primary_improvement"].mean()
+                ),
             }
         )
     fold_summary = pd.DataFrame(fold_rows)
@@ -271,7 +349,9 @@ def summarize_lane_improvements(comparison: pd.DataFrame) -> pd.DataFrame:
 def vix_family_decision(lanes: pd.DataFrame) -> dict[str, Any]:
     """Retain VIX only when >=2 lanes improve robustly in both full models."""
     full = lanes.loc[lanes["experiment_id"].isin(FULL_INTERFACE_EXPERIMENTS)].copy()
-    missing_models = sorted(set(FULL_INTERFACE_EXPERIMENTS).difference(full["experiment_id"]))
+    missing_models = sorted(
+        set(FULL_INTERFACE_EXPERIMENTS).difference(full["experiment_id"])
+    )
     if missing_models:
         raise ValueError(f"Missing full-interface ablation models: {missing_models}")
 
@@ -287,8 +367,7 @@ def vix_family_decision(lanes: pd.DataFrame) -> dict[str, Any]:
             raise ValueError(
                 f"Target lane {target_type} does not contain both full-interface models"
             )
-        robust_in_both = all(by_model.values())
-        lane_results[target_type] = robust_in_both
+        lane_results[target_type] = all(by_model.values())
         details[target_type] = by_model
 
     robust_lane_count = int(sum(lane_results.values()))
@@ -327,17 +406,17 @@ def build_ablation_tournament(
 
 
 def run_vix_ablation(report_output: Path = REPORT_OUTPUT) -> dict[str, Any]:
-    prepared = prepare_vix_model_dataset()
+    prepared = prepare_frozen_model_datasets()
 
     baseline_report = run_common_evaluation(
-        dataset_path=DEFAULT_MODEL_DATASET,
+        dataset_path=FROZEN_BASE_MODEL_DATASET,
         registry_path=DEFAULT_FEATURE_REGISTRY,
         predictions_output=BASE_PREDICTIONS,
         metrics_output=BASE_METRICS,
         summary_output=BASE_SUMMARY,
     )
     vix_report = run_common_evaluation(
-        dataset_path=VIX_MODEL_DATASET,
+        dataset_path=FROZEN_VIX_MODEL_DATASET,
         registry_path=VIX_REGISTRY,
         predictions_output=VIX_PREDICTIONS,
         metrics_output=VIX_METRICS,
@@ -369,10 +448,13 @@ def run_vix_ablation(report_output: Path = REPORT_OUTPUT) -> dict[str, Any]:
 
     report: dict[str, Any] = {
         "status": "VIX_ABLATION_COMPLETE",
-        "ablation_version": ABlation_VERSION,
+        "ablation_version": ABLATION_VERSION,
+        "ablation_as_of": prepared["as_of"],
         "baseline_feature_version": baseline_report.get("feature_set_version"),
         "vix_feature_version": vix_report.get("feature_set_version"),
         "rows": prepared["rows"],
+        "baseline_frozen_dataset_sha256": prepared["baseline_dataset_sha256"],
+        "vix_frozen_dataset_sha256": prepared["vix_dataset_sha256"],
         "vix_source_end": prepared["source_manifest"].get("end"),
         "vix_snapshot_sha256": prepared["source_manifest"].get("snapshot_sha256"),
         "comparison_cells": int(len(comparison)),
@@ -386,11 +468,15 @@ def run_vix_ablation(report_output: Path = REPORT_OUTPUT) -> dict[str, Any]:
         "next": "V3-013 QQQ/SPY relative-strength features",
         "note": (
             "Relative VIX improvement and V3-010 absolute promotion gates are both "
-            "reported, but V3-012 does not promote a model or tune a decision policy."
+            "reported, but V3-012 does not promote a model or tune a decision policy. "
+            "The experiment is frozen as-of 2026-08-18; later-maturing outcomes are "
+            "censored from both lanes."
         ),
     }
     report_output.parent.mkdir(parents=True, exist_ok=True)
-    report_output.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+    report_output.write_text(
+        json.dumps(report, indent=2, sort_keys=True), encoding="utf-8"
+    )
     print(json.dumps(report, indent=2, sort_keys=True))
     return report
 
