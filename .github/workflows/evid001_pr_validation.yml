@@ -5,6 +5,7 @@ on:
     paths:
       - "v3/evidence/**"
       - "v3/tests/test_forward_evidence.py"
+      - "v3/tests/test_forward_collection_policy.py"
       - "v3/features/build_features.py"
       - "v3/features/build_treasury_features.py"
       - "v3/features/feature_registry.json"
@@ -47,7 +48,10 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Run forward-evidence unit tests
-        run: python -m unittest -v v3.tests.test_forward_evidence
+        run: |
+          python -m unittest -v \
+            v3.tests.test_forward_evidence \
+            v3.tests.test_forward_collection_policy
 
       - name: Rebuild point-in-time research features
         run: |
