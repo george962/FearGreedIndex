@@ -2,11 +2,12 @@
   "dataset_end": "2026-08-18",
   "dataset_start": "2021-02-02",
   "generation_command": "python v3/baseline/freeze_v2_1.py",
-  "generator_sha256": "cbc38910b071a9fb3e0c1782217503766453df00b7355e33decf1a5c0d266dbb",
+  "generator_sha256": "80576eeb9add2d607e59f89137ea39c6b77090d8e6674d08809a3190e671247c",
   "historical_decision_rows": 1391,
+  "input_hash_contract": "parsed_used_fields_through_dataset_end_v1",
   "input_sha256": {
-    "data/fear_greed_daily.csv": "0f804d5017fa909e0f5449a0de7f7474ccbd19e48e01bd4e227451362c58ad82",
-    "data/spx_daily.csv": "74837eda7d4f9b38dad56e05f097fb04a693df9be7e3dbde2fb7176e00a3bca0"
+    "data/fear_greed_daily.csv": "1b97ea78bfb48f3672973ee6273882df7786119bf2b6b527b4d22bdaa53db0c2",
+    "data/spx_daily.csv": "8a291f5cbcd777ae9163bce91f5b1b03a726279f67c3f8502cae052f3d0528a8"
   },
   "report_sha256": {
     "action_scorecard.csv": "4c59932f64514a2d6d84fc492ef3fedd5354bda95a3748a775c6477ca31bdd0d",
