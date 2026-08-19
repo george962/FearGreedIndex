@@ -13,12 +13,13 @@
   "append_only": true,
   "store_full_feature_vector": true,
   "forbidden_column_fragments": [
-    "forward_return",
-    "forward_positive",
+    "forward_",
     "max_drawdown",
     "further_5pct_decline",
     "known_date",
-    "realized",
+    "realized_return",
+    "realized_pnl",
+    "realized_performance",
     "outcome",
     "target",
     "label"
@@ -31,6 +32,7 @@
   "rules": [
     "Feature snapshots may be collected without inspecting future outcomes.",
     "No forward outcome may enter the feature ledger.",
+    "Backward-looking realized-volatility features are permitted; realized returns, P&L, performance, and other outcome fields are forbidden.",
     "Existing ledger rows may never be rewritten.",
     "The frozen V3-015 Treasury research snapshot may never be refreshed by the forward collector.",
     "Post-cutoff Treasury observations are stored in a separate append-only source ledger with capture dates.",
