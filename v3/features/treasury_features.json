@@ -1,0 +1,20 @@
+{
+  "version": "v3-features-004-treasury",
+  "parent_version": "v3-features-001",
+  "source": "frozen Federal Reserve/FRED DGS2 and DGS10 daily snapshot",
+  "decision_time_convention": "Treasury observations are joined backward-as-of by observation date; treasury_date must never exceed decision_date. Portfolio execution remains next-session open.",
+  "features": [
+    {"name": "treasury_2y_level", "category": "treasury", "dtype": "float64", "point_in_time": true},
+    {"name": "treasury_10y_level", "category": "treasury", "dtype": "float64", "point_in_time": true},
+    {"name": "treasury_10y_2y_slope", "category": "treasury", "dtype": "float64", "point_in_time": true},
+    {"name": "treasury_2y_change_1", "category": "treasury", "dtype": "float64", "point_in_time": true},
+    {"name": "treasury_2y_change_5", "category": "treasury", "dtype": "float64", "point_in_time": true},
+    {"name": "treasury_2y_change_20", "category": "treasury", "dtype": "float64", "point_in_time": true},
+    {"name": "treasury_10y_change_1", "category": "treasury", "dtype": "float64", "point_in_time": true},
+    {"name": "treasury_10y_change_5", "category": "treasury", "dtype": "float64", "point_in_time": true},
+    {"name": "treasury_10y_change_20", "category": "treasury", "dtype": "float64", "point_in_time": true},
+    {"name": "treasury_slope_change_5", "category": "treasury", "dtype": "float64", "point_in_time": true},
+    {"name": "treasury_slope_change_20", "category": "treasury", "dtype": "float64", "point_in_time": true},
+    {"name": "treasury_10y_percentile_252", "category": "treasury", "dtype": "float64", "point_in_time": true}
+  ]
+}
