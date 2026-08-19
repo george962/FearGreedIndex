@@ -1,0 +1,45 @@
+{
+  "diagnostic_id": "DIAG-001",
+  "status": "complete",
+  "pre_registered_issue": 55,
+  "research_cutoff": "2026-08-18",
+  "feature_set_version": "v3-features-004-treasury",
+  "feature_count": 53,
+  "target_source_experiment": "EXP-006",
+  "target": "favorable_entry_20d",
+  "folds": [
+    "2024",
+    "2025",
+    "2026_ytd"
+  ],
+  "minimum_association_rows": 20,
+  "diagnostic_only": true,
+  "model_fitted": false,
+  "feature_selection_permitted": false,
+  "champion_selected": false,
+  "v3_019_eligible": false,
+  "current_sizing_multiplier": 1.0,
+  "result": {
+    "feature_drift_rows": 159,
+    "association_rows": 159,
+    "stability_rows": 53,
+    "features_with_any_training_to_test_sign_reversal": 42,
+    "features_with_any_adjacent_test_fold_sign_transition": 34,
+    "sample_hashes_match_exp006": true,
+    "interpretation": "Broad feature-target relationship drift with material target-prevalence and covariate drift. DIAG-001 outcomes are development evidence only for any post-DIAG hypothesis."
+  },
+  "evidence": {
+    "v3/reports/diag001_target_drift.csv": "36fd96faa560b899dd9398b48d5f81da49685d5bb87f077028e41841c33c8882",
+    "v3/reports/diag001_feature_drift.csv": "0012ab82daff59f144f916cdbbd77134f1e02b9254d076f23fd18bd92f1b2b67",
+    "v3/reports/diag001_feature_target_association.csv": "81a23219a370a50114da60bda0bf00a3e4bd0682f94de6616becbf81e74a6c8f",
+    "v3/reports/diag001_feature_stability.csv": "a2965642ebbdb20c3db521886111c5eadb69bf5c440d94c32b03607e1217c497",
+    "v3/reports/diag001_summary.json": "cba5d6e8a0ef26c2b808dc77677f30e3dbaccb4262165173bf2811fa6bb6108f"
+  },
+  "governance": {
+    "outer_folds_exposed_to_research": true,
+    "outer_fold_periods_are_final_promotion_evidence": false,
+    "future_feature_or_model_decisions_require_new_pre_registration": true,
+    "fresh_promotion_evidence_required": true,
+    "recommended_fresh_evidence": "Forward holdout beginning after the 2026-08-18 frozen research cutoff or separately acquired historical data unused by the research loop."
+  }
+}
