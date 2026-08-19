@@ -51,13 +51,19 @@ def sha256(path: Path) -> str:
 
 
 def require_repository_structure() -> None:
-    missing = [str(path.relative_to(ROOT)) for path in REQUIRED_RETAINED_COMPONENTS if not path.exists()]
+    missing = [
+        str(path.relative_to(ROOT))
+        for path in REQUIRED_RETAINED_COMPONENTS
+        if not path.exists()
+    ]
     if missing:
         raise RuntimeError(f"Missing retained-feature components: {missing}")
 
     leaked = [name for name in STALE_FINALIZERS if (WORKFLOWS / name).exists()]
     if leaked:
-        raise RuntimeError(f"Temporary write-enabled finalizers leaked into repository: {leaked}")
+        raise RuntimeError(
+            f"Temporary write-enabled finalizers leaked into repository: {leaked}"
+        )
 
 
 def verify_qqq_spy_snapshot() -> None:
@@ -72,7 +78,11 @@ def verify_qqq_spy_snapshot() -> None:
         )
 
 
-def write_result_marker(prefix: str, report_name: str, retention_key: str) -> dict[str, Any]:
+def write_result_marker(
+    prefix: str,
+    report_name: str,
+    retention_key: str,
+) -> dict[str, Any]:
     report_path = REPORTS / report_name
     report = json.loads(report_path.read_text(encoding="utf-8"))
     decision = report["feature_family_decision"]
@@ -103,7 +113,9 @@ def write_result_marker(prefix: str, report_name: str, retention_key: str) -> di
         "best_ranked_full_candidate": report[
             "best_ranked_full_candidate_in_ablation_tournament"
         ],
-        "promotion_ready": report["promotion_ready_experiments_from_absolute_gates"],
+        "promotion_ready": report[
+            "promotion_ready_experiments_from_absolute_gates"
+        ],
         "ablation_as_of": report["ablation_as_of"],
     }
 
@@ -112,37 +124,53 @@ def main() -> int:
     require_repository_structure()
     verify_qqq_spy_snapshot()
 
-    run(sys.executable, "-m", "unittest", "discover", "-s", "v3/tests", "-p", "test_*.py", "-v")
+    run(
+        sys.executable,
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "v3/tests",
+        "-p",
+        "test_*.py",
+        "-v",
+    )
 
-    run(sys.executable, "v3/features/build_features.py")
-    run(sys.executable, "v3/labels/build_labels.py")
-    run(sys.executable, "v3/evaluation/validate_dataset.py")
+    run(sys.executable, "-m", "v3.features.build_features")
+    run(sys.executable, "-m", "v3.labels.build_labels")
+    run(sys.executable, "-m", "v3.evaluation.validate_dataset")
 
-    run(sys.executable, "v3/evaluation/relative_strength_ablation.py")
+    run(sys.executable, "-m", "v3.evaluation.relative_strength_ablation")
 
-    run(sys.executable, "v3/ci/run_treasury_feature_stage.py")
-    run(sys.executable, "v3/evaluation/treasury_ablation.py")
+    run(sys.executable, "-m", "v3.ci.run_treasury_feature_stage")
+    run(sys.executable, "-m", "v3.evaluation.treasury_ablation")
 
-    run(sys.executable, "v3/ci/run_dollar_feature_stage.py")
-    run(sys.executable, "v3/evaluation/dollar_ablation.py")
+    run(sys.executable, "-m", "v3.ci.run_dollar_feature_stage")
+    run(sys.executable, "-m", "v3.evaluation.dollar_ablation")
 
-    run(sys.executable, "v3/evaluation/retained_combined_ablation.py")
+    run(sys.executable, "-m", "v3.evaluation.retained_combined_ablation")
 
     run(sys.executable, "-m", "unittest", "-v", "v3.tests.test_decision_policy")
-    run(sys.executable, "v3/policy/build_policy_manifest.py")
+    run(sys.executable, "-m", "v3.policy.build_policy_manifest")
     run(sys.executable, "-m", "unittest", "-v", "v3.tests.test_sizing_policy")
-    run(sys.executable, "v3/policy/build_sizing_manifest.py")
+    run(sys.executable, "-m", "v3.policy.build_sizing_manifest")
 
     decisions = {
         "relative_strength": write_result_marker(
-            "relative_strength", "relative_strength_ablation.json", "retain_relative_strength"
+            "relative_strength",
+            "relative_strength_ablation.json",
+            "retain_relative_strength",
         ),
         "treasury": write_result_marker(
             "treasury", "treasury_ablation.json", "retain_treasury"
         ),
-        "dollar": write_result_marker("dollar", "dollar_ablation.json", "retain_dollar"),
+        "dollar": write_result_marker(
+            "dollar", "dollar_ablation.json", "retain_dollar"
+        ),
         "retained_combined": write_result_marker(
-            "retained_combined", "retained_combined_ablation.json", "retain_combined"
+            "retained_combined",
+            "retained_combined_ablation.json",
+            "retain_combined",
         ),
     }
 
@@ -163,21 +191,33 @@ def main() -> int:
         encoding="utf-8",
     )
 
-    run(sys.executable, "v3/baseline/freeze_v2_1.py")
+    run(sys.executable, "-m", "v3.baseline.freeze_v2_1")
     run("git", "diff", "--exit-code", "--", "reports/baseline_v2_1/")
 
     summary = {
         "status": "PASS",
-        "repair_scope": ["V3-013", "V3-015A", "V3-015B", "V3-015C", "V3-016", "V3-017"],
+        "repair_scope": [
+            "V3-013",
+            "V3-015A",
+            "V3-015B",
+            "V3-015C",
+            "V3-016",
+            "V3-017",
+        ],
         "decisions": decisions,
-        "policy_manifest_sha256": sha256(REPORTS / "decision_policy_manifest.json"),
+        "policy_manifest_sha256": sha256(
+            REPORTS / "decision_policy_manifest.json"
+        ),
         "sizing_manifest_sha256": sha256(REPORTS / "sizing_policy_manifest.json"),
         "v2_1_reproducible": True,
         "temporary_finalize_workflows_present": False,
-        "qqq_spy_snapshot_sha256": sha256(ROOT / "v3" / "data" / "qqq_spy_daily.csv.gz"),
+        "qqq_spy_snapshot_sha256": sha256(
+            ROOT / "v3" / "data" / "qqq_spy_daily.csv.gz"
+        ),
     }
     (REPORTS / "integrity_rebuild_summary.json").write_text(
-        json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        json.dumps(summary, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
     )
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0
