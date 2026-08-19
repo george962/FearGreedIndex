@@ -16,7 +16,6 @@ from v3.evidence.append_forward_snapshot import (
     DEFAULT_REGISTRY,
     GENESIS_HASH,
     LEDGER_PREFIX,
-    build_snapshot_row,
     canonical_json,
     expected_columns,
     load_manifest,
@@ -43,10 +42,14 @@ def verify_checkpoints(path: Path, manifest: dict[str, Any], ledger_dates: list[
     require(isinstance(checkpoints, list), "Forward checkpoints must be a list")
 
     prior_end: str | None = None
+    ids: set[str] = set()
     for item in checkpoints:
         require(isinstance(item, dict), "Forward checkpoint entry must be an object")
         for field in ("checkpoint_id", "start_date", "end_date", "status"):
             require(bool(item.get(field)), f"Forward checkpoint missing {field}")
+        checkpoint_id = str(item["checkpoint_id"])
+        require(checkpoint_id not in ids, "Forward checkpoint id duplicated")
+        ids.add(checkpoint_id)
         start = pd.Timestamp(item["start_date"]).normalize().strftime("%Y-%m-%d")
         end = pd.Timestamp(item["end_date"]).normalize().strftime("%Y-%m-%d")
         require(start > manifest["research_exposed_through"], "Forward checkpoint starts inside exposed history")
@@ -58,7 +61,10 @@ def verify_checkpoints(path: Path, manifest: dict[str, Any], ledger_dates: list[
         if item["status"] == "OPENED":
             require(bool(item.get("opened_for_experiment")), "Opened checkpoint must record consuming experiment")
             require(bool(item.get("opened_on")), "Opened checkpoint must record open date")
-            require(all(start <= date <= end for date in ledger_dates if start <= date <= end), "Invalid forward checkpoint date range")
+            covered = [date for date in ledger_dates if start <= date <= end]
+            require(bool(covered), "Opened checkpoint has no collected ledger evidence")
+            require(covered[0] >= start and covered[-1] <= end, "Opened checkpoint ledger coverage drift")
+            require(end <= ledger_dates[-1], "Opened checkpoint extends beyond collected ledger evidence")
 
 
 def verify_lane(
