@@ -1,54 +1,57 @@
 # FearGreedIndex v3 — Research Workspace
 
-v3 is the next-generation predictive research system. It is intentionally separated from the frozen v2.1 baseline so experimental work cannot silently change the current operational strategy.
+V3 is the next-generation predictive research system. It is intentionally separated from the frozen v2.1 operational benchmark so experimental work cannot silently change the live strategy.
 
 ## Start here
 
-Read [`PLAN.md`](PLAN.md) for the authoritative staged implementation plan, acceptance gates, experiment rules, and recommended order of work.
+Use these files for different purposes:
 
-## Foundation pipeline — V3-001 through V3-004
+- [`PLAN.md`](PLAN.md) — original staged V3 roadmap and permanent methodology rules.
+- [`STATUS.md`](STATUS.md) — **current source of truth** for completed, retained, rejected, blocked, and active work.
+- [`experiments/README.md`](experiments/README.md) — post-roadmap experiment lifecycle and repository organization rules.
+- `experiments/EXP-XXX/` — pre-registration and immutable experiment contract.
+- `checkpoints/` — concise human-readable conclusions from completed milestones/experiments.
+- `reports/` — compact machine-readable evidence worth preserving in Git.
 
-```bash
-python v3/baseline/freeze_v2_1.py
-python v3/features/build_features.py
-python v3/labels/build_labels.py
-python v3/evaluation/validate_dataset.py
-python -m unittest -v \
-  v3.tests.test_features \
-  v3.tests.test_labels \
-  v3.tests.test_leakage
-```
+Do not infer the current research stage from an old branch or an individual report; read `STATUS.md`.
 
-### Point-in-time contract
+## Current research state
+
+- v2.1 remains frozen and operationally unchanged.
+- V3-001 through V3-018 are implemented, with V3-019 blocked because no candidate passes the champion gates.
+- Treasury/yield-curve context is the only later feature family retained by the repaired same-sample ablations.
+- VIX, QQQ/SPY relative strength, broad-dollar, and the combined feature stack were rejected under their frozen gates.
+- EXP-005 improved probability calibration but still failed the absolute prediction prerequisite.
+- Active research therefore returns to the **prediction formulation**, not sizing or champion promotion.
+- EXP-006 tests whether a 20-session entry-opportunity target is more learnable than exact forward-return/drawdown prediction.
+
+See `STATUS.md` and `experiments/EXP-006/PLAN.md` for exact frozen decisions and active criteria.
+
+## Point-in-time contract
 
 - `decision_date` is the date on which the feature vector is known.
-- Fear & Greed values are joined backward-as-of; a future source date is forbidden.
-- Market features use the current or earlier market observations only.
+- Fear & Greed values are backward-as-of joined; future source dates are forbidden.
+- Market/macro features use observations available on or before the decision date under their declared availability convention.
 - Labels remain separate from features.
 - A decision on date T enters at the next tradable session open.
-- 5/20/60-session targets include the entry session as session 1.
+- 5/20/60-session outcomes include the entry session as session 1.
 - `_forward_*_known_date` fields state when each outcome becomes legally available to training.
-- Model training must gate rows by the applicable known date, not merely by `decision_date`.
+- Training eligibility is controlled by the outcome-known date, not merely by `decision_date`.
 
-## Generated artifacts
+## Core reproducibility commands
 
-The foundation pipeline produces:
+```bash
+python -m v3.features.build_features
+python -m v3.labels.build_labels
+python -m v3.evaluation.validate_dataset
+python -m v3.baseline.freeze_v2_1
+python -m unittest discover -s v3/tests -p 'test_*.py'
+```
 
-- `reports/baseline_v2_1/backtest_summary.json`
-- `reports/baseline_v2_1/walk_forward_summary.csv`
-- `reports/baseline_v2_1/action_scorecard.csv`
-- `reports/baseline_v2_1/manifest.json`
-- `v3/data/features_daily.parquet`
-- `v3/data/labels_daily.parquet`
-- `v3/data/model_dataset.parquet`
-- `v3/reports/features_missingness.json`
-- `v3/reports/dataset_validation.json`
+Feature-family and experiment workflows rebuild any additional required snapshots/datasets before evaluation.
 
-The generated Parquet/report artifacts can be rebuilt from checked-in data and code. The v2.1 baseline manifest records SHA-256 hashes for the frozen runtime, inputs, and reports.
+## Artifact policy
 
-## Current status
+Generated Parquet prediction/model datasets are rebuildable and normally remain out of Git. Compact immutable evidence, manifests, checkpoints, and source-snapshot metadata are committed when they are necessary to reproduce a research conclusion.
 
-- v2.1 remains the frozen benchmark.
-- v3 has not been promoted to production.
-- V3-001 through V3-004 are the only active implementation scope until the foundation CI gate passes.
-- No model tournament or tactical sizing changes should begin until the foundation is reproducible and leakage validation passes.
+Every positive **and negative** experiment is preserved. A failed result cannot be retroactively tuned under the same experiment ID; material changes require a new pre-registered experiment/version.
