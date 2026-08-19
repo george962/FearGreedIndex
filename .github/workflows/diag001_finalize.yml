@@ -1,0 +1,66 @@
+name: Finalize DIAG-001 Evidence
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/diag001_finalize.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fear-greed-diag001-finalize-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  finalize_diag001:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out head branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Rebuild DIAG-001 evidence
+        run: |
+          python -m unittest -v v3.tests.test_diag001_drift
+          python -m v3.features.build_features
+          python -m v3.labels.build_labels
+          python -m v3.evaluation.validate_dataset
+          python -m v3.ci.run_treasury_feature_stage
+          python -m v3.diagnostics.diag001_drift
+
+      - name: Verify frozen v2.1 benchmark
+        run: |
+          python -m v3.baseline.freeze_v2_1
+          git diff --exit-code -- reports/baseline_v2_1/
+
+      - name: Commit exact evidence and remove finalizer
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f \
+            v3/reports/diag001_target_drift.csv \
+            v3/reports/diag001_feature_drift.csv \
+            v3/reports/diag001_feature_target_association.csv \
+            v3/reports/diag001_feature_stability.csv \
+            v3/reports/diag001_summary.json
+          git rm .github/workflows/diag001_finalize.yml
+          git diff --cached --quiet && exit 0
+          git commit -m "Finalize DIAG-001 drift evidence"
+          git push origin HEAD:${{ github.head_ref }}
