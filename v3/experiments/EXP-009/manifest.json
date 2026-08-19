@@ -1,0 +1,68 @@
+{
+  "experiment_id": "EXP-009",
+  "status": "complete_reject",
+  "pre_registered_issue": 52,
+  "research_cutoff": "2026-08-18",
+  "feature_set_version": "v3-features-004-treasury",
+  "feature_count": 53,
+  "target_source_experiment": "EXP-006",
+  "target": "favorable_entry_20d",
+  "model_source_experiment": "EXP-006",
+  "model_name": "opportunity_random_forest_v1",
+  "adaptation": {
+    "window_eligible_rows": 504,
+    "selection": "most_recent_eligible_rows",
+    "alternative_windows_allowed_under_same_experiment": false,
+    "exponential_weighting": false,
+    "regime_filter": false
+  },
+  "model_contract": {
+    "imputer": "median",
+    "n_estimators": 300,
+    "max_depth": 6,
+    "min_samples_leaf": 10,
+    "max_features": "sqrt",
+    "bootstrap": true,
+    "random_state": 42,
+    "n_jobs": 1,
+    "calibration": false
+  },
+  "references": [
+    "recent_window_training_prevalence",
+    "frozen_full_history_EXP-006_random_forest"
+  ],
+  "viability_gate": {
+    "require_exp006_sample_hash_match": true,
+    "require_exact_training_rows_each_fold": 504,
+    "minimum_mean_relative_brier_improvement_exclusive": 0.0,
+    "minimum_positive_relative_brier_folds": 2,
+    "minimum_mean_roc_auc_exclusive": 0.52,
+    "minimum_positive_auc_folds": 2,
+    "minimum_fold_roc_auc_inclusive": 0.45,
+    "require_mean_brier_better_than_full_history": true,
+    "require_mean_auc_better_than_full_history": true,
+    "minimum_brier_better_than_full_history_folds": 2,
+    "minimum_auc_better_than_full_history_folds": 2
+  },
+  "champion_gate_version": "v3-champion-gates-001",
+  "production_policy_changed": false,
+  "sizing_changed": false,
+  "tuning_after_result_allowed_under_same_version": false,
+  "result": {
+    "decision": "DO_NOT_ADVANCE_RECENT_WINDOW_UNDER_EXP_009",
+    "experiment_viability_pass": false,
+    "mean_relative_brier_improvement": -0.17261529368598802,
+    "positive_relative_brier_folds": 0,
+    "mean_roc_auc": 0.463160875954451,
+    "positive_auc_folds": 1,
+    "minimum_fold_roc_auc": 0.3883426966292135,
+    "mean_brier_improvement_vs_full_history": -0.019962240676940097,
+    "mean_auc_improvement_vs_full_history": 0.10708803619774794,
+    "brier_better_than_full_history_folds": 0,
+    "auc_better_than_full_history_folds": 2
+  },
+  "evidence": {
+    "v3/reports/exp009_evaluation.json": "03a73e35c49b4140568a95f6f5d804900e558877a3c27f67e2bfa19f958c6ede",
+    "v3/reports/exp009_metrics.csv": "cda7d7150da7d7e02665810d64454c4598ac707310d364162b67bbea85085128"
+  }
+}
