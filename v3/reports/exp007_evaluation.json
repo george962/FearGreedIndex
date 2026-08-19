@@ -1,0 +1,38 @@
+{
+  "as_of": "2026-08-18",
+  "champion_gate_version": "v3-champion-gates-001",
+  "champion_selected": false,
+  "current_sizing_multiplier": 1.0,
+  "dataset_sha256": "22a48c4c430259da124dc1339d655796187b617caacc485e34035733ee74b8e8",
+  "decision": "DO_NOT_ADVANCE_RATE_REGIME_UNDER_EXP_007",
+  "experiment_id": "EXP-007",
+  "experiment_viability_pass": false,
+  "feature_count": 53,
+  "feature_version": "v3-features-004-treasury",
+  "note": "EXP-007 tests one fixed Treasury regime hypothesis with no ML model. It may not be retuned after result inspection.",
+  "regime_definition": {
+    "RATES_FALLING_OR_FLAT": "<= 0",
+    "RATES_RISING": "> 0"
+  },
+  "regime_feature": "treasury_10y_change_20",
+  "status": "EXP_007_EVALUATION_COMPLETE",
+  "target_source_experiment": "EXP-006",
+  "training_prevalence_ordering_by_fold": [
+    "FALLING_HIGHER",
+    "FALLING_HIGHER",
+    "RISING_HIGHER"
+  ],
+  "training_prevalence_ordering_stable": false,
+  "v3_019_eligible": false,
+  "viability": {
+    "full_mature_test_regime_coverage": true,
+    "mean_relative_brier_improvement": -0.006275822796846496,
+    "mean_roc_auc": 0.4990119071382824,
+    "minimum_fold_roc_auc": 0.4431638566912539,
+    "positive_auc_folds": 1,
+    "positive_relative_brier_folds": 1,
+    "regime_training_support_pass": true,
+    "sample_hashes_match_exp006": true,
+    "viability_gate_pass": false
+  }
+}

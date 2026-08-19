@@ -27,6 +27,7 @@
 | V3-018 Champion acceptance gates | COMPLETE — CURRENT CANDIDATE NOT PROMOTION READY | PR #43, `v3-champion-gates-001`; fail-closed; V3-019 ineligible |
 | EXP-005 Chronologically calibrated ExtraTrees | COMPLETE — REJECT | PR #45; calibration improved materially but absolute prediction gate still fails |
 | EXP-006 Opportunity-state target reformulation | COMPLETE — REJECT | issue #46 / PR #47; stationary 20d favorable-entry target fails; strong cross-year relationship reversal |
+| EXP-007 Fixed 20-session 10Y rate regime | COMPLETE — REJECT | issue #48 / PR #49; regime-only predictor mean AUC ~0.499; training regime ordering flips by 2026 |
 
 ## Blocked / deferred
 
@@ -47,10 +48,12 @@
 - Treasury remains the only later feature family retained.
 - PR #43 completed fail-closed V3-018 champion gates. No current candidate passes the absolute prediction prerequisite.
 - EXP-005 improved probability calibration but still had negative relative Brier improvement and negative return/drawdown rank correlations.
-- EXP-006 changed the prediction problem instead of tuning EXP-005. It tested a pre-registered 20-session favorable-entry target using the same 53-feature Treasury lane.
-- EXP-006 also fails: logistic mean relative Brier improvement `-0.669`, mean ROC AUC `0.352`; random forest mean relative Brier improvement `-0.148`, mean ROC AUC `0.356`.
-- The important EXP-006 finding is **cross-year instability** rather than merely weak average performance: random-forest AUC is about `0.629` in 2024, then `0.282` in 2025 and `0.157` in 2026 YTD.
-- That pattern argues against another stationary-model tweak and supports testing a genuinely regime-aware formulation under a new experiment ID.
+- EXP-006 changed the prediction problem instead of tuning EXP-005. Its stationary 20-session favorable-entry target also fails: logistic mean relative Brier `-0.669`, mean AUC `0.352`; random forest mean relative Brier `-0.148`, mean AUC `0.356`.
+- EXP-006 nevertheless exposed severe chronological relationship instability: random-forest AUC is about `0.629` in 2024, `0.282` in 2025, and `0.157` in 2026 YTD.
+- EXP-007 then tested one fixed causal explanation before adding model complexity: rising vs falling/flat 10Y rates using `treasury_10y_change_20`.
+- That hypothesis also fails. Mean relative Brier improvement is `-0.0063`, mean AUC is `0.499`, positive AUC folds are `1/3`, and minimum fold AUC is `0.443`.
+- More importantly, the historical favorable-entry prevalence ordering itself changes from `FALLING_HIGHER` in the first two training folds to `RISING_HIGHER` by 2026. A single static rate-direction regime therefore does not explain the nonstationarity.
+- The next clean hypothesis is **time adaptation itself**: keep the EXP-006 target/features/model fixed and test a single pre-registered recent rolling training window rather than searching more regime definitions.
 - V3-017 remains hard-gated at **1.00x**. No champion has been selected; `v3_019_eligible = false`.
 
 ## Repository organization
@@ -67,8 +70,9 @@ See `v3/experiments/README.md` for the experiment lifecycle.
 ## Next
 
 1. Do **not** proceed to V3-019; zero candidates pass V3-018.
-2. Do not retune EXP-005 or EXP-006 after seeing their results.
-3. The next prediction experiment should use a new ID and explicitly test **regime-aware / regime-conditioned relationships**, motivated by the 2024→2025→2026 reversal seen in EXP-006.
-4. Pre-register regime definitions using information available on the decision date; do not define regimes from future returns or from test-period performance.
-5. Keep the same frozen cutoff, Treasury feature lane, chronological folds, and base-rate comparisons so any improvement is attributable to the regime formulation.
-6. V3-014 breadth may resume only when a point-in-time historical source satisfies issue #31; credit spreads remain license/source gated.
+2. Do not retune EXP-005, EXP-006, or EXP-007 after seeing their results.
+3. Use a new experiment ID to test **recent-window adaptation** directly, keeping the EXP-006 target, retained Treasury feature set, and fixed random-forest parameters unchanged.
+4. Pre-register one standard rolling training length before results; do not compare multiple windows under the same experiment.
+5. Keep the same frozen cutoff, chronological test folds, realized-date sample hashes, and absolute Brier/AUC viability gates so any improvement is attributable to recency rather than changed samples or thresholds.
+6. Only if a recent-window model demonstrates robust absolute predictive edge should subsequent work revisit calibration, champion evidence, or sizing.
+7. V3-014 breadth may resume only when a point-in-time historical source satisfies issue #31; credit spreads remain license/source gated.
