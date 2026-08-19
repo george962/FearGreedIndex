@@ -1,6 +1,6 @@
 {
   "experiment_id": "EXP-008",
-  "status": "pre_registered_active",
+  "status": "complete_reject",
   "pre_registered_issue": 50,
   "research_cutoff": "2026-08-18",
   "feature_set_version": "v3-features-004-treasury",
@@ -36,5 +36,20 @@
   "production_policy_changed": false,
   "sizing_changed": false,
   "tuning_after_result_allowed_under_same_version": false,
-  "evidence": {}
+  "result": {
+    "decision": "DO_NOT_ADVANCE_SENTIMENT_EXTREMES_UNDER_EXP_008",
+    "experiment_viability_pass": false,
+    "mean_relative_brier_improvement": -0.018732333265115027,
+    "positive_relative_brier_folds": 1,
+    "mean_roc_auc": 0.5284956858414293,
+    "positive_auc_folds": 2,
+    "minimum_fold_roc_auc": 0.4332191780821918,
+    "state_training_support_pass": false,
+    "hypothesized_prevalence_ordering_folds": 0
+  },
+  "evidence": {
+    "v3/reports/exp008_evaluation.json": "dc2c2680de42495f13c3619b8f991a7ce2a22646cd0f964b2a44a235c8aeac3f",
+    "v3/reports/exp008_metrics.csv": "283257a37b00e42450a79e020fe032405d9ec078f64d427d054d4daefecbe4f7",
+    "v3/reports/exp008_sentiment_diagnostics.csv": "82f9c24f589a1e85b34cd433e758784d302b405b200fd1c2c9d5c7914a784631"
+  }
 }
