@@ -23,7 +23,7 @@ V3-016 implements a deterministic layer that converts standardized model predict
 - Engine: `v3/policy/decision_policy.py`
 - Immutable manifest: `v3/reports/decision_policy_manifest.json`
 
-The manifest records SHA-256 hashes for both policy config and engine code.
+The manifest records SHA-256 hashes for both policy config and engine code and is verified by the repository-integrity checkpoint.
 
 ## Safety / separation guarantees
 
@@ -39,13 +39,17 @@ The manifest records SHA-256 hashes for both policy config and engine code.
 
 The policy tests cover all four action paths, confidence degradation, inclusive threshold boundaries, invalid probabilities, deterministic output, exact action vocabulary, and absence of hidden sizing/sell semantics.
 
-The policy remains unbound to a production champion. The current combined random-forest candidate remains research-only until V3-018/V3-019 promotion gates are satisfied.
+## Corrected research-candidate context
+
+The integrity rerun invalidated the earlier assumption that the 76-feature combined stack was retained. QQQ/SPY, broad dollar, and the combined stack are rejected under their frozen retention rules. Treasury is the only later feature family that remains retained, and `UST-EXP-004` is the best-ranked full candidate in the Treasury ablation. It is still **not promotion-ready**.
+
+The decision policy remains deliberately model-agnostic and unbound to a production champion.
 
 ## Next
 
-V3-017 may now test the minimal sizing layer separately:
+V3-017 keeps sizing separate:
 
 - baseline = `1.00x`
-- strongest validated positive signal = `1.10x`
+- strongest promotion-ready positive signal = `1.10x`
 
-No larger or more complex sizing should be introduced unless this minimal policy works robustly out of sample.
+V3-018/V3-019 must establish champion status before any extra sizing can activate.
