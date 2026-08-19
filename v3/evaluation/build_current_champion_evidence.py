@@ -21,6 +21,7 @@ TREASURY_REPORT = ROOT / "v3" / "reports" / "treasury_ablation.json"
 INTEGRITY_REPORT = ROOT / "v3" / "reports" / "integrity_rebuild_summary.json"
 POLICY_MANIFEST = ROOT / "v3" / "reports" / "decision_policy_manifest.json"
 SIZING_MANIFEST = ROOT / "v3" / "reports" / "sizing_policy_manifest.json"
+BASE_MODEL_MANIFEST = ROOT / "v3" / "experiments" / "EXP-004" / "manifest.json"
 
 
 def parse_args() -> argparse.Namespace:
@@ -45,15 +46,22 @@ def build_evidence() -> dict[str, Any]:
     integrity = load_json(INTEGRITY_REPORT)
     policy = load_json(POLICY_MANIFEST)
     sizing = load_json(SIZING_MANIFEST)
+    base_model = load_json(BASE_MODEL_MANIFEST)
 
-    candidate_id = str(treasury["best_ranked_full_candidate_in_ablation_tournament"])
-    promotion_ready = treasury.get("promotion_ready_experiments_from_absolute_gates")
+    candidate_id = str(
+        treasury["best_ranked_full_candidate_in_ablation_tournament"]
+    )
+    promotion_ready = treasury.get(
+        "promotion_ready_experiments_from_absolute_gates"
+    )
     if not isinstance(promotion_ready, list):
         raise ValueError("Treasury promotion-ready experiment list is missing")
     prediction_ready = candidate_id in promotion_ready
 
     decisions = integrity.get("decisions")
-    treasury_integrity = decisions.get("treasury") if isinstance(decisions, dict) else None
+    treasury_integrity = (
+        decisions.get("treasury") if isinstance(decisions, dict) else None
+    )
     data_quality_pass = (
         integrity.get("status") == "PASS"
         and integrity.get("v2_1_reproducible") is True
@@ -64,11 +72,16 @@ def build_evidence() -> dict[str, Any]:
     sizing_activation = sizing.get("current_candidate_activation")
     if prediction_ready and sizing_activation == "BLOCKED":
         incomplete_reason = (
-            "Prediction is marked ready but sizing remains blocked; champion portfolio evidence must be generated only after resolving that contract."
+            "Prediction is marked ready but sizing remains blocked; champion "
+            "portfolio evidence must be generated only after resolving that "
+            "contract."
         )
     elif not prediction_ready:
         incomplete_reason = (
-            "The strongest retained candidate fails the existing absolute prediction-readiness prerequisite. V3-017 therefore remains at 1.00x and champion portfolio/cost/parameter evidence is intentionally not generated."
+            "The strongest retained candidate fails the existing absolute "
+            "prediction-readiness prerequisite. V3-017 therefore remains at "
+            "1.00x and champion portfolio/cost/parameter evidence is "
+            "intentionally not generated."
         )
     else:
         incomplete_reason = "Champion portfolio evidence has not yet been supplied."
@@ -80,14 +93,15 @@ def build_evidence() -> dict[str, Any]:
         "incomplete_reason": incomplete_reason,
         "lineage": {
             "feature_version": treasury["candidate_feature_version"],
-            "model_version": candidate_id,
-            "label_version": "v3-labels-001",
-            "training_version": "v3-evaluator-001",
+            "model_version": base_model["model_name"],
+            "label_version": base_model["label_version"],
+            "training_version": base_model["experiment_id"],
             "policy_version": policy.get("policy_version"),
             "sizing_version": sizing.get("sizing_version"),
             "evidence_hashes": {
                 "treasury_ablation": sha256(TREASURY_REPORT),
                 "integrity_rebuild": sha256(INTEGRITY_REPORT),
+                "exp_004_manifest": sha256(BASE_MODEL_MANIFEST),
                 "decision_policy_manifest": sha256(POLICY_MANIFEST),
                 "sizing_policy_manifest": sha256(SIZING_MANIFEST),
             },
@@ -107,7 +121,9 @@ def build_evidence() -> dict[str, Any]:
             "point_in_time_pass": data_quality_pass,
             "leakage_gate_pass": data_quality_pass,
             "sample_hashes_match": data_quality_pass,
-            "frozen_v2_1_reproducible": integrity.get("v2_1_reproducible") is True,
+            "frozen_v2_1_reproducible": (
+                integrity.get("v2_1_reproducible") is True
+            ),
         },
         "sizing_activation": sizing_activation,
         "current_multiplier": 1.00,
@@ -119,7 +135,10 @@ def main() -> int:
     args = parse_args()
     evidence = build_evidence()
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    args.output.write_text(
+        json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     print(json.dumps(evidence, indent=2, sort_keys=True))
     return 0
 
