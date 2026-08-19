@@ -1,0 +1,40 @@
+{
+  "as_of": "2026-08-18",
+  "calibration": {},
+  "candidate_id": "UST-EXP-004",
+  "cost_robustness": {},
+  "cross_year": {},
+  "current_multiplier": 1.0,
+  "data_quality": {
+    "frozen_v2_1_reproducible": true,
+    "leakage_gate_pass": true,
+    "point_in_time_pass": true,
+    "sample_hashes_match": true
+  },
+  "evidence_complete": false,
+  "incomplete_reason": "The strongest retained candidate fails the existing absolute prediction-readiness prerequisite. V3-017 therefore remains at 1.00x and champion portfolio/cost/parameter evidence is intentionally not generated.",
+  "lineage": {
+    "evidence_hashes": {
+      "decision_policy_manifest": "c0cf2e56d69aa5c8a3f78f5424c33c0bd39c9c061c95fca084c6a95364ae73d5",
+      "exp_004_manifest": "397a5b65ad2eda94a377fc84eb2bc41ed71838b6f5eb0a200c1135abee79df72",
+      "integrity_rebuild": "e242ceb2dd9d27655131b4c40768ace836e4dde228ff9dcdb0a5b974b1faf3d3",
+      "sizing_policy_manifest": "7d1cfcb9ebcb74c24dd889e8fb6635d514205f0abc559751c9b326644c234690",
+      "treasury_ablation": "0927e0b0b3cedebdc46e55b56bb3f881709cd6f894d8288f893f3ec42570e887"
+    },
+    "feature_version": "v3-features-004-treasury",
+    "label_version": "v3-labels-001",
+    "model_version": "random_forest_v1",
+    "policy_version": "v3-decision-policy-001",
+    "sizing_version": "v3-sizing-policy-001",
+    "training_version": "EXP-004"
+  },
+  "parameter_robustness": {},
+  "portfolio": {},
+  "prediction": {
+    "absolute_prediction_gate_pass": false,
+    "promotion_ready_experiments": [],
+    "source_gate_version": "v3-tournament-001"
+  },
+  "risk": {},
+  "sizing_activation": "BLOCKED"
+}
