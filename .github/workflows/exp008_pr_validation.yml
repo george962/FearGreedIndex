@@ -5,6 +5,7 @@ on:
     paths:
       - "v3/evaluation/exp008_sentiment_extremes.py"
       - "v3/tests/test_exp008_sentiment_extremes.py"
+      - "v3/ci/check_exp008_evidence.py"
       - "v3/experiments/EXP-008/**"
       - "v3/checkpoints/EXP-008.md"
       - "v3/reports/exp008_evaluation.json"
@@ -62,6 +63,14 @@ jobs:
       - name: Run pre-registered EXP-008 evaluation
         run: python -m v3.evaluation.exp008_sentiment_extremes
 
+      - name: Verify committed EXP-008 evidence reproduces exactly
+        run: |
+          git diff --exit-code -- \
+            v3/reports/exp008_evaluation.json \
+            v3/reports/exp008_metrics.csv \
+            v3/reports/exp008_sentiment_diagnostics.csv
+          python -m v3.ci.check_exp008_evidence
+
       - name: Verify frozen v2.1 benchmark
         run: |
           python -m v3.baseline.freeze_v2_1
@@ -79,5 +88,6 @@ jobs:
             v3/reports/exp008_predictions.parquet
             v3/experiments/EXP-008/PLAN.md
             v3/experiments/EXP-008/manifest.json
+            v3/checkpoints/EXP-008.md
           if-no-files-found: warn
           retention-days: 90
