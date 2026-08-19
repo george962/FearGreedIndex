@@ -1,0 +1,61 @@
+{
+  "as_of": "2026-08-18",
+  "classification": {
+    "base_fit_fraction": 0.8,
+    "calibration_fraction": 0.2,
+    "calibration_minimum_rows": 80,
+    "calibrator": {
+      "C": 1.0,
+      "fit_intercept": true,
+      "max_iter": 1000,
+      "penalty": "l2",
+      "solver": "lbfgs",
+      "type": "LogisticRegression"
+    },
+    "minimum_base_fit_rows": 100,
+    "model": {
+      "bootstrap": false,
+      "max_depth": 8,
+      "max_features": "sqrt",
+      "min_samples_leaf": 10,
+      "n_estimators": 500,
+      "n_jobs": 1,
+      "random_state": 42,
+      "type": "ExtraTreesClassifier"
+    },
+    "refit_after_calibration": false
+  },
+  "evidence": {
+    "evaluation_sha256": "6736ad509aea27d668321c65091750f7d2f857cd539ea08cfcd11cfe1a0b1c35",
+    "metrics_sha256": "adb8bc843b9ba073e51cfd181dba582878d8669f00c1da3608aa2eab90bfb2ed",
+    "tournament_sha256": "e44e09c86d79f48278b0732a75e5793bae84cb08312809b09759676c82061ef9"
+  },
+  "experiment_id": "EXP-005",
+  "feature_count": 53,
+  "feature_set_version": "v3-features-004-treasury",
+  "frozen_dataset_sha256": "22a48c4c430259da124dc1339d655796187b617caacc485e34035733ee74b8e8",
+  "gate_version": "v3-champion-gates-001",
+  "immutable": true,
+  "implementation_commit_sha": "25a4d8def3381e78b9cd1032e03ef29932ac73c2",
+  "integrity_guard": "v3/ci/check_exp005_evidence.py",
+  "label_version": "v3-labels-001",
+  "model_name": "extra_trees_calibrated_v1",
+  "pre_registered_issue": 44,
+  "prediction_prerequisite_pass": false,
+  "promotion_status": "NOT_PROMOTION_READY",
+  "regression": {
+    "bootstrap": false,
+    "max_depth": 8,
+    "max_features": "sqrt",
+    "min_samples_leaf": 10,
+    "n_estimators": 500,
+    "n_jobs": 1,
+    "random_state": 42,
+    "target_transform": null,
+    "type": "ExtraTreesRegressor"
+  },
+  "sample_hashes_match": true,
+  "sizing_multiplier": 1.0,
+  "status": "completed_negative_experiment",
+  "tuning_after_result_allowed_under_same_version": false
+}
