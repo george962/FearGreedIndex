@@ -23,6 +23,11 @@ from v3.evidence.append_forward_snapshot import (
     read_ledger,
     sha256_bytes,
 )
+from v3.evidence.collect_forward_treasury import (
+    DEFAULT_FORWARD_SOURCE,
+    DEFAULT_FROZEN_SOURCE,
+    verify_forward_treasury_source,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CHECKPOINTS = ROOT / "v3" / "evidence" / "forward_checkpoints.json"
@@ -73,6 +78,8 @@ def verify_lane(
     registry_path: Path = DEFAULT_REGISTRY,
     ledger_path: Path = DEFAULT_LEDGER,
     checkpoints_path: Path = DEFAULT_CHECKPOINTS,
+    treasury_forward_source_path: Path = DEFAULT_FORWARD_SOURCE,
+    treasury_frozen_source_path: Path = DEFAULT_FROZEN_SOURCE,
 ) -> dict[str, Any]:
     manifest = load_manifest(manifest_path)
     _, feature_names = load_registry(registry_path, manifest)
@@ -114,6 +121,10 @@ def verify_lane(
     ledger_dates = [row["decision_date"] for row in rows]
     require(len(ledger_dates) == len(set(ledger_dates)), "Forward ledger duplicate dates")
     verify_checkpoints(checkpoints_path, manifest, ledger_dates)
+    treasury = verify_forward_treasury_source(
+        treasury_forward_source_path,
+        frozen_source_path=treasury_frozen_source_path,
+    )
 
     report = {
         "lane_id": manifest["lane_id"],
@@ -125,6 +136,7 @@ def verify_lane(
         "first_ledger_date": ledger_dates[0] if ledger_dates else None,
         "last_ledger_date": ledger_dates[-1] if ledger_dates else None,
         "chain_head": rows[-1]["row_sha256"] if rows else GENESIS_HASH,
+        "treasury_forward_source": treasury,
         "outcomes_present": False,
         "champion_selected": False,
         "v3_019_eligible": False,
@@ -139,6 +151,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--registry", type=Path, default=DEFAULT_REGISTRY)
     parser.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER)
     parser.add_argument("--checkpoints", type=Path, default=DEFAULT_CHECKPOINTS)
+    parser.add_argument("--treasury-forward-source", type=Path, default=DEFAULT_FORWARD_SOURCE)
+    parser.add_argument("--treasury-frozen-source", type=Path, default=DEFAULT_FROZEN_SOURCE)
     return parser.parse_args()
 
 
@@ -149,6 +163,8 @@ def main() -> int:
         registry_path=args.registry,
         ledger_path=args.ledger,
         checkpoints_path=args.checkpoints,
+        treasury_forward_source_path=args.treasury_forward_source,
+        treasury_frozen_source_path=args.treasury_frozen_source,
     )
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0
