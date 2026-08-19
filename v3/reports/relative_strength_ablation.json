@@ -1,0 +1,47 @@
+{
+  "ablation_as_of": "2026-08-18",
+  "ablation_version": "v3-relative-strength-ablation-001",
+  "baseline_feature_version": "v3-features-001",
+  "baseline_frozen_dataset_sha256": "16d6528800ce12ff92b8e6e9f7ec0764450b11165baf7e14d429fde443cd96f1",
+  "best_ranked_full_candidate_in_ablation_tournament": "BASE-EXP-004",
+  "candidate_feature_version": "v3-features-003-relative-strength",
+  "candidate_frozen_dataset_sha256": "da3ad0083e8feff3c2091849b5c6c9d5aca0382a4bde958169366add36458d12",
+  "champion_selected": false,
+  "champion_selection_status": "DEFERRED_TO_V3_018_V3_019",
+  "comparison_cells": 60,
+  "feature_family_decision": {
+    "criterion": "A lane is robust only when its aggregate primary metric improves and at least 2 of 3 chronological folds improve. Relative strength is retained only when at least 2 of 3 lanes are robust in both EXP-003 and EXP-004.",
+    "decision": "KEEP_RELATIVE_STRENGTH_FOR_LATER_RESEARCH",
+    "family_lane_robust_in_both_full_models": {
+      "classification": true,
+      "drawdown_regression": false,
+      "return_regression": true
+    },
+    "per_model_lane_robustness": {
+      "classification": {
+        "EXP-003": true,
+        "EXP-004": true
+      },
+      "drawdown_regression": {
+        "EXP-003": false,
+        "EXP-004": false
+      },
+      "return_regression": {
+        "EXP-003": true,
+        "EXP-004": true
+      }
+    },
+    "required_robust_lanes": 2,
+    "retain_relative_strength": true,
+    "robust_lane_count": 2
+  },
+  "next": "V3-014 market-breadth features",
+  "note": "V3-013 changes only the QQQ/SPY feature family. The experiment is frozen as-of 2026-08-18 and does not promote a model or tune a trading policy.",
+  "promotion_ready_experiments_from_absolute_gates": [],
+  "rows": 1393,
+  "sample_hashes_match": true,
+  "snapshot_sha256": "f37a31eecc01e1aa0ddcf55965fe0e1e2cdfe8cb75f17bef5813eda25c82a4be",
+  "source_end": "2026-08-18",
+  "status": "RELATIVE_STRENGTH_ABLATION_COMPLETE",
+  "trading_policy_status": "UNCHANGED_AND_DEFERRED_TO_V3_016"
+}
