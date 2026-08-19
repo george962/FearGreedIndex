@@ -1,0 +1,52 @@
+{
+  "gate_version": "v3-champion-gates-001",
+  "status": "frozen_pre_registered",
+  "pre_registered_issue": 42,
+  "frozen_before_current_candidate_evaluation": true,
+  "fail_closed": true,
+  "prediction_prerequisite": {
+    "required": true
+  },
+  "calibration": {
+    "mean_ece_max": 0.1,
+    "max_fold_horizon_ece": 0.2,
+    "mean_relative_brier_improvement_min_exclusive": 0.0
+  },
+  "after_cost_portfolio": {
+    "base_cost_bps_per_1x_turnover": 2.0,
+    "combined_excess_total_return_min_exclusive": 0.0,
+    "annualized_excess_return_min_exclusive": 0.0
+  },
+  "cross_year_robustness": {
+    "required_positive_folds": 2,
+    "expected_folds": 3,
+    "max_positive_excess_contribution_share": 0.7
+  },
+  "sharpe": {
+    "candidate_must_be_at_least_benchmark": true,
+    "candidate_must_be_at_least_v2_1": true
+  },
+  "maximum_drawdown": {
+    "no_exception_deterioration_pp_max": 2.0,
+    "conditional_deterioration_pp_max": 5.0,
+    "conditional_min_annualized_return_benefit_pp": 3.0,
+    "conditional_calmar_must_be_at_least_both_references": true
+  },
+  "cost_robustness": {
+    "stress_5bps_excess_total_return_min_exclusive": 0.0,
+    "stress_10bps_annualized_excess_return_min_inclusive": 0.0
+  },
+  "parameter_robustness": {
+    "required_positive_scenarios": 3,
+    "expected_scenarios": 4,
+    "positive_excess_total_return_min_exclusive": 0.0,
+    "hard_drawdown_ceiling_deterioration_pp": 5.0
+  },
+  "data_quality": {
+    "point_in_time_required": true,
+    "leakage_gate_required": true,
+    "sample_hash_match_required": true,
+    "frozen_v2_1_reproducibility_required": true
+  },
+  "promotion_rule": "Every required gate must PASS. Missing, NaN, stale, mismatched, blocked, or failed evidence means NOT_PROMOTION_READY. Exactly one fully passing candidate is required before V3-019 may create a champion manifest."
+}
