@@ -5,10 +5,12 @@ on:
     paths:
       - "v3/diagnostics/**"
       - "v3/tests/test_diag001_drift.py"
+      - "v3/ci/check_diag001_evidence.py"
       - "v3/checkpoints/DIAG-001.md"
       - "v3/reports/diag001_*.csv"
       - "v3/reports/diag001_summary.json"
       - "v3/STATUS.md"
+      - "v3/README.md"
       - ".github/workflows/diag001_pr_validation.yml"
       - "requirements.txt"
 
@@ -55,6 +57,9 @@ jobs:
       - name: Run DIAG-001 drift analysis
         run: python -m v3.diagnostics.diag001_drift
 
+      - name: Verify committed DIAG-001 evidence semantically reproduces
+        run: python -m v3.ci.check_diag001_evidence
+
       - name: Verify frozen v2.1 benchmark
         run: |
           python -m v3.baseline.freeze_v2_1
@@ -71,5 +76,7 @@ jobs:
             v3/reports/diag001_feature_target_association.csv
             v3/reports/diag001_feature_stability.csv
             v3/reports/diag001_summary.json
+            v3/diagnostics/diag001_manifest.json
+            v3/checkpoints/DIAG-001.md
           if-no-files-found: warn
           retention-days: 90
