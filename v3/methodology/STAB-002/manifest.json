@@ -1,0 +1,52 @@
+{
+  "method_id": "STAB-002",
+  "status": "pre_registered",
+  "pre_registered_issue": 64,
+  "research_cutoff": "2026-08-18",
+  "feature_set_version": "v3-features-004-treasury",
+  "feature_count": 53,
+  "target_source_experiment": "EXP-006",
+  "target": "favorable_entry_20d",
+  "ranking_source_method": "STAB-001",
+  "outer_folds": ["2024", "2025", "2026_ytd"],
+  "outer_folds_are_development_evidence_only": true,
+  "evid001_outcomes_must_remain_sealed": true,
+  "calibration_contract": {
+    "calibration_history_rows": 240,
+    "calibration_blocks": 3,
+    "rows_per_block": 80,
+    "minimum_inner_formation_rows": 400,
+    "minimum_inner_selected_features": 3,
+    "minimum_inner_selected_families": 2,
+    "selector_must_be_rebuilt_before_each_block": true,
+    "inner_training_requires_outcome_known_before_block": true,
+    "platt_model": {
+      "class": "LogisticRegression",
+      "C": 1.0,
+      "solver": "lbfgs",
+      "max_iter": 1000,
+      "random_state": 42
+    },
+    "positive_slope_required": true,
+    "negative_slope_inversion_allowed": false
+  },
+  "viability_gate": {
+    "require_all_support_conditions": true,
+    "minimum_mean_roc_auc_exclusive": 0.52,
+    "minimum_positive_auc_folds": 3,
+    "minimum_fold_roc_auc_inclusive": 0.50,
+    "minimum_mean_relative_brier_improvement_exclusive": 0.0,
+    "minimum_positive_relative_brier_folds": 2,
+    "minimum_fold_relative_brier_improvement_inclusive": -0.05,
+    "minimum_brier_better_than_raw_stab001_folds": 2,
+    "require_aggregate_brier_better_than_raw_stab001": true,
+    "require_mean_ece_improvement_vs_raw_stab001": true,
+    "maximum_mean_ece_inclusive": 0.15,
+    "require_stab001_sample_hash_match": true
+  },
+  "pass_effect": "justify_pre_registration_of_EXP-010_only",
+  "champion_selected": false,
+  "v3_019_eligible": false,
+  "sizing_multiplier": 1.0,
+  "tuning_after_result_allowed_under_same_version": false
+}
