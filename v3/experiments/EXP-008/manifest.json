@@ -1,0 +1,40 @@
+{
+  "experiment_id": "EXP-008",
+  "status": "pre_registered_active",
+  "pre_registered_issue": 50,
+  "research_cutoff": "2026-08-18",
+  "feature_set_version": "v3-features-004-treasury",
+  "feature_count": 53,
+  "target_source_experiment": "EXP-006",
+  "target": "favorable_entry_20d",
+  "sentiment_state": {
+    "source_feature": "fear_greed",
+    "extreme_fear_max": 25.0,
+    "extreme_greed_min": 75.0,
+    "labels": [
+      "EXTREME_FEAR",
+      "NEUTRAL_RANGE",
+      "EXTREME_GREED"
+    ],
+    "minimum_training_rows_per_state": 50,
+    "require_both_target_classes_per_state": true,
+    "require_full_mature_test_coverage": true
+  },
+  "predictor": "historical_training_prevalence_within_current_sentiment_state",
+  "reference_predictor": "global_historical_training_prevalence",
+  "viability_gate": {
+    "minimum_mean_relative_brier_improvement_exclusive": 0.0,
+    "minimum_positive_relative_brier_folds": 2,
+    "minimum_mean_roc_auc_exclusive": 0.52,
+    "minimum_positive_auc_folds": 2,
+    "minimum_fold_roc_auc_inclusive": 0.45,
+    "minimum_hypothesized_prevalence_ordering_folds": 2,
+    "require_exp006_sample_hash_match": true
+  },
+  "hypothesized_prevalence_order": "EXTREME_FEAR > NEUTRAL_RANGE > EXTREME_GREED",
+  "champion_gate_version": "v3-champion-gates-001",
+  "production_policy_changed": false,
+  "sizing_changed": false,
+  "tuning_after_result_allowed_under_same_version": false,
+  "evidence": {}
+}
