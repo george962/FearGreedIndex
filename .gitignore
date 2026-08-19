@@ -14,4 +14,13 @@ reports/*.json
 !reports/.gitkeep
 
 v3/data/*.parquet
+v3/reports/*.json
 v3/reports/*.parquet
+
+# Immutable V3 evidence must be committable even though scratch JSON is ignored.
+!v3/reports/*_ablation.json
+!v3/reports/*_manifest.json
+!v3/reports/feature_registry_*.json
+!v3/reports/dataset_validation_*.json
+!v3/reports/*_features_missingness.json
+!v3/reports/integrity_rebuild_summary.json
