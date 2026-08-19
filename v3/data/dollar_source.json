@@ -1,0 +1,20 @@
+{
+  "availability_rule": "Conservative research rule: an observation dated T is eligible no earlier than T+1 calendar day. This avoids assuming same-day H.10 availability.",
+  "end": "2026-08-14",
+  "normalized_columns": [
+    "date",
+    "dollar_index"
+  ],
+  "normalized_sha256": "b80a886259e07235eff24d0608ad26ac35a4b407a6f295a3401f9d92f142da63",
+  "requested_end_inclusive": "2026-08-18",
+  "requested_start": "2019-01-01",
+  "retrieved_utc": "2026-08-19T02:11:51.957427+00:00",
+  "rows": 1903,
+  "series": "DTWEXBGS",
+  "snapshot_format": "gzip csv; deterministic mtime=0",
+  "snapshot_sha256": "4f0262055d199b6be3236602031129cc067f2a6a8a2364379e326c7b6f33f4ab",
+  "source": "Federal Reserve Board broad U.S. dollar index via FRED",
+  "source_sha256": "23807b22f1f87c06277436931aa7c4b5c7530bfa4335505656e31bb3f14e787f",
+  "start": "2019-01-02",
+  "usage": "Frozen V3-015B broad-dollar research snapshot. Experiments consume the checked-in normalized data rather than current FRED history."
+}

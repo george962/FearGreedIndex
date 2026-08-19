@@ -1,0 +1,5 @@
+status=PASS
+policy_version=v3-decision-policy-001
+research_only=true
+sizing_defined=false
+sell_or_underweight_allowed=false

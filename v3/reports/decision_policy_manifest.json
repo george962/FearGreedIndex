@@ -1,0 +1,16 @@
+{
+  "action_vocabulary": [
+    "STRONG ADD",
+    "ADD MODESTLY",
+    "BASELINE",
+    "WAIT FOR BETTER ENTRY"
+  ],
+  "champion_required_for_production": true,
+  "policy_config_sha256": "347351aa2c61bca9aa91bd43747587c30015b0bdfedd8a1df726c39d17238fb1",
+  "policy_engine_sha256": "a1f58d97e718f7dea7c457a8fcdffe6e5dfb12eeb6cad7c79e26f7fe5b342e6e",
+  "policy_status": "research_only",
+  "policy_version": "v3-decision-policy-001",
+  "sell_or_underweight_allowed": false,
+  "sizing_defined": false,
+  "threshold_origin": "pre_registered_semantic_thresholds_not_backtest_optimized"
+}

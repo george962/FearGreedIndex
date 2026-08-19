@@ -1,0 +1,69 @@
+{
+  "baseline_feature_count": 41,
+  "end": "2026-08-18",
+  "feature_version": "v3-features-004-treasury",
+  "future_source_rows": 0,
+  "input_sha256": {
+    "baseline_features": "31948141696e451f8f69613eba3481d8b11d3e72642c1d0c13e507164d795b63",
+    "treasury_snapshot": "3691f934065c24003d9ea263f098cf4821800d777960e08771bd2037a3dc6d4a"
+  },
+  "missingness": {
+    "treasury_10y_2y_slope": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "treasury_10y_change_1": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "treasury_10y_change_20": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "treasury_10y_change_5": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "treasury_10y_level": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "treasury_10y_percentile_252": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "treasury_2y_change_1": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "treasury_2y_change_20": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "treasury_2y_change_5": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "treasury_2y_level": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "treasury_date": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "treasury_slope_change_20": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    },
+    "treasury_slope_change_5": {
+      "missing_fraction": 0.0,
+      "missing_rows": 0
+    }
+  },
+  "output_sha256": "7df79de2d02e8c36111998b3595f3fde0443ba95fc15d1be62e822cd9df703c8",
+  "rows": 1393,
+  "start": "2021-02-01",
+  "total_feature_count": 53,
+  "treasury_feature_count": 12
+}

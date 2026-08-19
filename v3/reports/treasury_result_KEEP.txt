@@ -1,0 +1,6 @@
+decision=KEEP_TREASURY_FOR_LATER_RESEARCH
+robust_lane_count=2
+sample_hashes_match=True
+best_ranked_full_candidate=UST-EXP-004
+promotion_ready=[]
+ablation_as_of=2026-08-18

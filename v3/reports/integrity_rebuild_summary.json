@@ -1,0 +1,54 @@
+{
+  "decisions": {
+    "dollar": {
+      "ablation_as_of": "2026-08-18",
+      "best_ranked_full_candidate": "USD-EXP-004",
+      "decision": "DO_NOT_RETAIN_DOLLAR_FEATURE_FAMILY",
+      "promotion_ready": [],
+      "retain": false,
+      "robust_lane_count": 1,
+      "sample_hashes_match": true
+    },
+    "relative_strength": {
+      "ablation_as_of": "2026-08-18",
+      "best_ranked_full_candidate": "BASE-EXP-004",
+      "decision": "DO_NOT_RETAIN_RELATIVE_STRENGTH_FEATURE_FAMILY",
+      "promotion_ready": [],
+      "retain": false,
+      "robust_lane_count": 1,
+      "sample_hashes_match": true
+    },
+    "retained_combined": {
+      "ablation_as_of": "2026-08-18",
+      "best_ranked_full_candidate": "COMBO-EXP-004",
+      "decision": "DO_NOT_RETAIN_COMBINED_FEATURE_SET",
+      "promotion_ready": [],
+      "retain": false,
+      "robust_lane_count": 1,
+      "sample_hashes_match": true
+    },
+    "treasury": {
+      "ablation_as_of": "2026-08-18",
+      "best_ranked_full_candidate": "UST-EXP-004",
+      "decision": "KEEP_TREASURY_FOR_LATER_RESEARCH",
+      "promotion_ready": [],
+      "retain": true,
+      "robust_lane_count": 2,
+      "sample_hashes_match": true
+    }
+  },
+  "policy_manifest_sha256": "c0cf2e56d69aa5c8a3f78f5424c33c0bd39c9c061c95fca084c6a95364ae73d5",
+  "qqq_spy_snapshot_sha256": "f37aecaed12de2839e1716180f1c108613963530d6fb139bf177ca9e0f16a4be",
+  "repair_scope": [
+    "V3-013",
+    "V3-015A",
+    "V3-015B",
+    "V3-015C",
+    "V3-016",
+    "V3-017"
+  ],
+  "sizing_manifest_sha256": "7d1cfcb9ebcb74c24dd889e8fb6635d514205f0abc559751c9b326644c234690",
+  "status": "PASS",
+  "temporary_finalize_workflows_present": false,
+  "v2_1_reproducible": true
+}
