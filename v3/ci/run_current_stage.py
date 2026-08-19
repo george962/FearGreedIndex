@@ -53,7 +53,7 @@ def ensure_vix_snapshot() -> dict[str, object]:
         )
 
     manifest = json.loads(VIX_SOURCE_MANIFEST.read_text(encoding="utf-8"))
-    expected = str(manifest.get("normalized_sha256", ""))
+    expected = str(manifest.get("snapshot_sha256", ""))
     actual = _sha256(VIX_SNAPSHOT)
     if not expected or expected != actual:
         raise SystemExit(
@@ -127,7 +127,8 @@ def main() -> int:
                 "total_feature_count": feature_report.get("total_feature_count"),
                 "vix_source_start": source_manifest.get("start"),
                 "vix_source_end": source_manifest.get("end"),
-                "vix_snapshot_sha256": source_manifest.get("normalized_sha256"),
+                "vix_normalized_sha256": source_manifest.get("normalized_sha256"),
+                "vix_snapshot_sha256": source_manifest.get("snapshot_sha256"),
                 "dataset_validation": validation.get("status"),
                 "next": "V3-012 controlled VIX ablation",
             },
