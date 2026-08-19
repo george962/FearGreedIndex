@@ -1,0 +1,18 @@
+{
+  "end": "2026-08-17",
+  "normalized_columns": [
+    "date",
+    "vix_close"
+  ],
+  "normalized_sha256": "76f9c0e2239ba76ddd200af1849a32aa9e2af854ed8bcddd233848faabdc46b3",
+  "retrieved_utc": "2026-08-19T00:23:40.084432+00:00",
+  "rows": 1948,
+  "snapshot_format": "gzip csv; deterministic mtime=0",
+  "snapshot_sha256": "576fb5e5c29ea3e76bd198850118c46452dd3a0b278dca7b36651379dfd097f8",
+  "snapshot_start": "2019-01-01",
+  "source": "Cboe VIX Index historical daily data",
+  "source_sha256": "a81e798b40294d5676cc0cd057659fcafa31505c8a92d13e769d2d3e685122eb",
+  "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+  "start": "2019-01-02",
+  "usage": "Research snapshot for V3-011/V3-012, trimmed to 2019 onward for sufficient pre-2021 rolling warmup. Later experiments consume this checked-in compressed snapshot rather than refetching live history."
+}
