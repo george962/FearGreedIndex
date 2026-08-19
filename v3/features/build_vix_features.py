@@ -15,7 +15,7 @@ from v3.features.build_features import _rolling_percentile
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_BASE_FEATURES = ROOT / "v3" / "data" / "features_daily.parquet"
-DEFAULT_VIX = ROOT / "v3" / "data" / "vix_daily.csv"
+DEFAULT_VIX = ROOT / "v3" / "data" / "vix_daily.csv.gz"
 DEFAULT_OUTPUT = ROOT / "v3" / "data" / "features_daily_vix.parquet"
 DEFAULT_REGISTRY = ROOT / "v3" / "features" / "feature_registry_vix.json"
 DEFAULT_REPORT = ROOT / "v3" / "reports" / "vix_features_missingness.json"
