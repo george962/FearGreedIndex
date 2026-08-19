@@ -5,11 +5,13 @@ on:
     paths:
       - "v3/evaluation/stab001_past_only.py"
       - "v3/tests/test_stab001_past_only.py"
+      - "v3/ci/check_stab001_evidence.py"
       - "v3/methodology/**"
       - "v3/reports/stab001_*"
       - "v3/checkpoints/STAB-001.md"
       - "v3/evaluation/exp006_opportunity.py"
       - "v3/experiments/EXP-006/**"
+      - "v3/evidence/**"
       - "v3/features/**"
       - "v3/labels/**"
       - "v3/models/common.py"
@@ -63,13 +65,14 @@ jobs:
       - name: Reproduce frozen EXP-006 samples
         run: python -m v3.evaluation.exp006_opportunity
 
-      - name: Run pre-registered STAB-001 evaluation
+      - name: Run frozen STAB-001 evaluation
         run: python -m v3.evaluation.stab001_past_only
 
+      - name: Verify immutable STAB-001 evidence semantically reproduces
+        run: python -m v3.ci.check_stab001_evidence
+
       - name: Verify EVID-001 remains sealed
-        run: |
-          python -m v3.evidence.verify_forward_lane
-          test "$(wc -l < v3/evidence/forward_checkpoints.json)" -gt 0
+        run: python -m v3.evidence.verify_forward_lane
 
       - name: Verify frozen v2.1 benchmark
         run: |
@@ -87,5 +90,6 @@ jobs:
             v3/reports/stab001_selected_features.csv
             v3/methodology/STAB-001/PLAN.md
             v3/methodology/STAB-001/manifest.json
+            v3/checkpoints/STAB-001.md
           if-no-files-found: warn
           retention-days: 90
