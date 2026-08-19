@@ -1,0 +1,34 @@
+{
+  "experiment_id": "EXP-007",
+  "status": "pre_registered_active",
+  "pre_registered_issue": 48,
+  "research_cutoff": "2026-08-18",
+  "feature_set_version": "v3-features-004-treasury",
+  "feature_count": 53,
+  "target_source_experiment": "EXP-006",
+  "target": "favorable_entry_20d",
+  "regime": {
+    "source_feature": "treasury_10y_change_20",
+    "rising_rule": "> 0",
+    "falling_or_flat_rule": "<= 0",
+    "labels": ["RATES_RISING", "RATES_FALLING_OR_FLAT"],
+    "minimum_training_rows_per_regime": 100,
+    "require_both_target_classes_per_regime": true,
+    "require_full_mature_test_coverage": true
+  },
+  "predictor": "historical_training_prevalence_within_current_rate_regime",
+  "reference_predictor": "global_historical_training_prevalence",
+  "viability_gate": {
+    "minimum_mean_relative_brier_improvement_exclusive": 0.0,
+    "minimum_positive_relative_brier_folds": 2,
+    "minimum_mean_roc_auc_exclusive": 0.52,
+    "minimum_positive_auc_folds": 2,
+    "minimum_fold_roc_auc_inclusive": 0.45,
+    "require_exp006_sample_hash_match": true
+  },
+  "champion_gate_version": "v3-champion-gates-001",
+  "production_policy_changed": false,
+  "sizing_changed": false,
+  "tuning_after_result_allowed_under_same_version": false,
+  "evidence": {}
+}
