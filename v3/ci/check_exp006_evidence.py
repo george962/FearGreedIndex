@@ -5,7 +5,8 @@ The committed evidence bytes remain immutable and SHA-256 protected. A fresh
 rerun may differ by tiny floating-point serialization noise, so rerun outputs
 are compared against the committed evidence with a tight numeric tolerance
 while all identifiers, samples, decisions, gates, and discrete contracts remain
-exact.
+exact. Rows appended strictly after the frozen research cutoff may change the
+whole generated dataset hash without changing the frozen experiment.
 """
 
 from __future__ import annotations
@@ -47,14 +48,6 @@ def head_bytes(path: Path) -> bytes:
     return completed.stdout
 
 
-def head_json(path: Path) -> dict:
-    return json.loads(head_bytes(path).decode("utf-8"))
-
-
-def head_csv(path: Path) -> pd.DataFrame:
-    return pd.read_csv(io.BytesIO(head_bytes(path)))
-
-
 def compare_frame(current: pd.DataFrame, frozen: pd.DataFrame, keys: list[str], label: str) -> None:
     require(set(current.columns) == set(frozen.columns), f"{label} column set drift")
     current = current[frozen.columns].sort_values(keys).reset_index(drop=True)
@@ -76,13 +69,15 @@ def compare_frame(current: pd.DataFrame, frozen: pd.DataFrame, keys: list[str], 
 
 
 def compare_evaluation(current: dict, frozen: dict) -> None:
+    # Do not compare dataset_sha256. The generated dataset may append rows after
+    # the frozen 2026-08-18 cutoff. Exact mature fold sample hashes and all
+    # metrics/decisions remain protected below.
     exact_keys = (
         "experiment_id",
         "as_of",
         "status",
         "feature_version",
         "feature_count",
-        "dataset_sha256",
         "sample_hashes_match",
         "experiment_viability_pass",
         "decision",
