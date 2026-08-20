@@ -1,0 +1,71 @@
+{
+  "method_id": "STAB-003",
+  "status": "pre_registered",
+  "pre_registered_issue": 70,
+  "research_cutoff": "2026-08-18",
+  "feature_set_version": "v3-features-004-treasury",
+  "feature_count": 53,
+  "target": "favorable_entry_20d",
+  "target_source_experiment": "EXP-006",
+  "outer_folds": ["2024", "2025", "2026_ytd"],
+  "outer_folds_are_development_evidence_only": true,
+  "evid001_outcomes_must_remain_sealed": true,
+  "long_memory_contract": {
+    "source": "frozen_STAB-001_selector",
+    "chronological_blocks": 4,
+    "minimum_observed_rows_per_block": 100,
+    "minimum_majority_sign_blocks": 3,
+    "recent_block_must_agree": true,
+    "minimum_median_absolute_spearman": 0.05,
+    "weight_formula": "median_abs_spearman * sign_consistency_fraction"
+  },
+  "short_memory_contract": {
+    "maximum_training_rows": 504,
+    "minimum_training_rows": 360,
+    "chronological_blocks": 3,
+    "minimum_observed_rows_per_block": 100,
+    "require_same_nonzero_sign_in_all_blocks": true,
+    "minimum_median_absolute_spearman": 0.05,
+    "weight_formula": "median_abs_spearman"
+  },
+  "consensus_contract": {
+    "require_selected_by_both": true,
+    "require_same_direction": true,
+    "weight_formula": "sqrt(long_weight * short_weight)",
+    "minimum_selected_features": 3,
+    "minimum_selected_families": 2,
+    "diag001_feature_list_may_be_hard_coded": false
+  },
+  "score_contract": {
+    "feature_transform": "full_legal_training_empirical_percentile",
+    "center": 0.5,
+    "normalization": "sum_absolute_consensus_weights",
+    "output": "ranking_score_not_probability"
+  },
+  "abstention_contract": {
+    "threshold_source": "legal_training_score_distribution_only",
+    "strong_unfavorable_quantile": 0.20,
+    "strong_favorable_quantile": 0.80,
+    "middle_state": "ABSTAIN",
+    "unsupported_fold_state": "ABSTAIN"
+  },
+  "viability_gate": {
+    "minimum_support_folds": 2,
+    "minimum_mean_roc_auc_exclusive": 0.55,
+    "minimum_roc_auc_above_0_52_folds": 2,
+    "minimum_fold_roc_auc_inclusive": 0.45,
+    "minimum_favorable_lift_exclusive": 0.05,
+    "minimum_favorable_lift_folds": 2,
+    "minimum_unfavorable_separation_exclusive": 0.05,
+    "minimum_unfavorable_separation_folds": 2,
+    "minimum_supported_fold_coverage_inclusive": 0.20,
+    "maximum_supported_fold_coverage_inclusive": 0.55,
+    "require_exp006_sample_hash_match": true,
+    "require_evid001_outcomes_sealed": true
+  },
+  "pass_effect": "justify_pre_registration_of_EXP-010_only",
+  "champion_selected": false,
+  "v3_019_eligible": false,
+  "sizing_multiplier": 1.0,
+  "tuning_after_result_allowed_under_same_version": false
+}
