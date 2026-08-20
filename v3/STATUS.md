@@ -34,6 +34,7 @@
 | EVID-001 Untouched post-DIAG forward evidence | COMPLETE — COLLECTION ACTIVE | issue #60 / PR #61; append-only point-in-time feature/Treasury ledgers beginning after `2026-08-18`; no outcomes open automatically |
 | STAB-001 Past-only relationship stability selection | COMPLETE — REJECT / RANKING PROMISING | issue #62 / PR #63; mean AUC ~0.573 and AUC >0.50 in 3/3 folds, but relative Brier <0 in 3/3 folds |
 | STAB-002 Nested causal calibration | COMPLETE — REJECT | issue #64 / PR #65; ECE improved materially, but positive calibration slope only 1/3 folds and relative Brier remained negative |
+| STAB-003 Long/short consensus + abstention | COMPLETE — REJECT / ADAPTIVE RANKING CLUE | issue #70 / PR #71; 2024 supported AUC ~0.656, but support only 1/3 folds and fixed training score thresholds shifted out of distribution |
 
 ## Blocked / deferred
 
@@ -52,10 +53,14 @@
 - The favorable-entry base rate also drifts materially: 2024 test prevalence is about **+13.8 percentage points** above its training history, 2025 about **-4.3 pp**, and 2026 YTD about **-10.3 pp**.
 - Covariate shift is material in macro/market context. Maximum absolute standardized mean differences include roughly `1.45` for `treasury_10y_level`, `1.42` for `treasury_10y_percentile_252`, `1.06` for `treasury_2y_level`, and `1.01` for `spx_distance_ma_200`.
 - A smaller set of market-stress/position features has stable-looking directional relationships across all three exposed folds, notably `spx_distance_ma_200`, `spx_realized_vol_5`, `spx_realized_vol_20`, `spx_realized_vol_60`, and `treasury_slope_change_20`. These are **hypothesis-generation observations only**, not promotion evidence.
+- STAB-001 is the strongest methodology clue so far: causal past-only selection produced mean AUC ~**0.573** with AUC >0.50 in all three exposed folds, but its absolute probability mapping was poor. This suggests the ordering information is more stable than probability level.
+- STAB-002 confirmed that a simple causal calibration layer is not enough. ECE improved, but calibration slope orientation remained unstable and relative Brier stayed negative.
+- STAB-003 directly tested relationship adaptation. Its supported 2024 consensus reached AUC ~**0.656**, but the fixed training score quantiles transferred badly: **0 strong-favorable vs 130 strong-unfavorable calls**. Ranking survived while absolute score location shifted.
+- STAB-003 also showed the coarse semantic-family support rule can fail for the wrong reason: 2025 and 2026-YTD retained multiple consensus features, but nearly all were SPX market-stress/position variables and therefore collapsed to one naming family. Some are also mathematically redundant (for example distance-from-high and drawdown variants), so future diversity control should be based on training-only dependence/independence rather than file-name families alone.
 - DIAG-001 inspected the 2024, 2025, and 2026 YTD outcomes. Therefore those periods are now **research-exposed** for any post-DIAG feature/model formulation. They may be used for development diagnostics, but not presented as fresh final promotion evidence for a model designed from DIAG-001.
-- EVID-001 is complete and its collection lane is active. The frozen V3-015 Treasury research snapshot remains immutable; new DGS2/DGS10 observations are captured separately with capture-date provenance so later releases cannot be treated as historically known.
+- EVID-001 is complete and its collection lane is active. The first sealed feature row is `2026-08-19`; outcomes remain absent/sealed. The frozen V3-015 Treasury research snapshot remains immutable, while new Treasury observations are captured separately with capture-date provenance.
 - EVID-001 never hindsight-backfills a missed decision date, never rewrites a sealed same-day row, and never generates labels/outcomes. A forward date becomes research-exposed only through an explicit checkpoint-opening action.
-- The EVID-001 merge head passed all six exact-head workflows, including the dedicated forward-evidence checks and full historical repository-integrity rebuild. Frozen v2.1 reproduced with zero diff.
+- STAB-001 and STAB-002 reproduction guards were hardened so post-cutoff data appends do not falsely invalidate frozen historical experiments; committed evidence hashes, exact sample hashes, metrics, selected/calibration evidence, decisions, and EVID-001 seal state remain enforced.
 - V3-017 remains hard-gated at **1.00x**. No champion has been selected; `v3_019_eligible = false`.
 
 ## Repository organization
@@ -63,6 +68,7 @@
 - `PLAN.md` — original roadmap/methodology rules.
 - `STATUS.md` — current truth.
 - `experiments/EXP-XXX/` — pre-registration and immutable predictive-experiment contracts.
+- `methodology/STAB-XXX/` — pre-registered relationship/stability methodology experiments that may justify later predictive experiments but cannot themselves promote a champion.
 - `diagnostics/` — diagnostic-only research; no model/feature selection without a later pre-registered experiment.
 - `evidence/` — sealed untouched-forward feature/source evidence and explicit unseal checkpoints.
 - `checkpoints/` — human-readable conclusions and historical repair records.
@@ -74,9 +80,10 @@ See `v3/experiments/README.md`, `v3/diagnostics/README.md`, and `v3/evidence/REA
 ## Next
 
 1. Do **not** proceed to V3-019; zero candidates pass V3-018.
-2. Do not retune EXP-005 through EXP-009 after seeing their results.
-3. STAB-001 and STAB-002 are frozen. Ranking improved, but causal score orientation/calibration still drift. Next test a pre-registered long-memory/short-memory consensus and abstention methodology; do not retune either stability experiment.
-4. Keep collecting EVID-001 forward snapshots without opening outcomes. Do not use the forward lane for feature/model selection until an explicit checkpoint is deliberately unsealed for a pre-registered experiment.
-5. Any feature/model rule motivated by DIAG-001 requires a new pre-registered experiment ID. Do not directly hard-code the stable-looking DIAG-001 features into production or call their exposed-fold performance unseen.
-6. Final champion promotion must eventually rely on a deliberately opened, genuinely untouched evidence checkpoint or separately acquired never-used historical data.
-7. V3-014 breadth may resume only with a valid point-in-time source; credit spreads remain license/source gated.
+2. Do not retune EXP-005 through EXP-009 or STAB-001 through STAB-003 after seeing their results.
+3. Pre-register **STAB-004** as a development-only adaptive-score methodology. It should preserve the long/short causal relationship idea but replace static full-training score thresholds with a fixed **recent causal score reference window** so score-location drift can be handled without using future outcomes.
+4. In STAB-004, replace coarse semantic-family diversity with **training-only redundancy control** (for example deterministic correlation clustering / representative selection) so many highly correlated SPX variants count as one effective signal while genuinely independent signals may coexist even within the same semantic family. Freeze the clustering threshold and representative rule before evaluation.
+5. Keep STAB-004 as a ranking/abstention methodology first. Do not force probability calibration again until adaptive ranking and call separation survive development folds.
+6. Keep collecting EVID-001 forward snapshots without opening outcomes. Do not use the forward lane for feature/model selection until an explicit checkpoint is deliberately unsealed for a pre-registered experiment.
+7. Any STAB-004/EXP-010 rule motivated by exposed 2024–2026 evidence remains development-only. Final champion promotion must eventually rely on a deliberately opened, genuinely untouched evidence checkpoint or separately acquired never-used historical data.
+8. V3-014 breadth may resume only with a valid point-in-time source; credit spreads remain license/source gated.
