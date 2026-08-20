@@ -52,9 +52,13 @@ def compare_frame(current: pd.DataFrame, frozen: pd.DataFrame, name: str) -> Non
 
 
 def compare_evaluation(current: dict, frozen: dict) -> None:
+    # Whole generated-dataset hashes are intentionally excluded from semantic
+    # reproduction. Appending rows strictly after the frozen research cutoff is
+    # allowed; the historical sample hashes, calibration evidence, metrics,
+    # decisions, and governance state must still reproduce exactly.
     exact = (
         "method_id", "as_of", "status", "feature_version", "feature_count",
-        "dataset_sha256", "target_source_experiment", "target", "ranking_source_method",
+        "target_source_experiment", "target", "ranking_source_method",
         "calibration_protocol", "method_viability_pass", "decision",
         "development_evidence_only", "research_exposed_periods", "evid001_outcomes_opened",
         "champion_selected", "v3_019_eligible", "current_sizing_multiplier",

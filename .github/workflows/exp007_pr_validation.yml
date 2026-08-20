@@ -14,6 +14,7 @@ on:
       - "v3/evaluation/exp006_opportunity.py"
       - "v3/evaluation/exp007_rate_regime.py"
       - "v3/ci/run_treasury_feature_stage.py"
+      - "v3/ci/check_exp006_evidence.py"
       - "v3/ci/check_exp007_evidence.py"
       - "v3/tests/test_exp006_opportunity.py"
       - "v3/tests/test_exp007_rate_regime.py"
@@ -73,18 +74,15 @@ jobs:
         run: python -m v3.ci.run_treasury_feature_stage
 
       - name: Reproduce frozen EXP-006 samples
-        run: python -m v3.evaluation.exp006_opportunity
+        run: |
+          python -m v3.evaluation.exp006_opportunity
+          python -m v3.ci.check_exp006_evidence
 
-      - name: Run pre-registered EXP-007 evaluation
+      - name: Reproduce frozen EXP-007 evaluation
         run: python -m v3.evaluation.exp007_rate_regime
 
-      - name: Verify committed EXP-007 evidence reproduces exactly
-        run: |
-          git diff --exit-code -- \
-            v3/reports/exp007_evaluation.json \
-            v3/reports/exp007_metrics.csv \
-            v3/reports/exp007_regime_diagnostics.csv
-          python -m v3.ci.check_exp007_evidence
+      - name: Verify committed EXP-007 evidence semantically reproduces
+        run: python -m v3.ci.check_exp007_evidence
 
       - name: Verify frozen v2.1 benchmark
         run: |

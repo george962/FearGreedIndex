@@ -56,13 +56,17 @@ def compare_frame(current: pd.DataFrame, frozen: pd.DataFrame, *, name: str) -> 
 
 
 def compare_evaluation(current: dict, frozen: dict) -> None:
+    # dataset_sha256 intentionally is not compared here. The generated research
+    # dataset may gain rows strictly after the frozen 2026-08-18 cutoff. Those
+    # future rows must not invalidate a historical experiment when its mature
+    # test sample hashes, metrics, selected-feature diagnostics, and decisions
+    # reproduce exactly.
     exact_keys = (
         "method_id",
         "as_of",
         "status",
         "feature_version",
         "feature_count",
-        "dataset_sha256",
         "target_source_experiment",
         "target",
         "selection_rule",

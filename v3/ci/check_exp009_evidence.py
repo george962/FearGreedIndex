@@ -56,9 +56,11 @@ def compare_frame(current: pd.DataFrame, frozen: pd.DataFrame) -> None:
 
 
 def compare_evaluation(current: dict, frozen: dict) -> None:
+    # Future post-cutoff rows may change only the generated whole-dataset hash.
+    # Frozen samples, metrics, adaptation contract, and decision remain strict.
     exact_keys = (
         "experiment_id", "as_of", "status", "feature_version", "feature_count",
-        "dataset_sha256", "target_source_experiment", "model_source_experiment",
+        "target_source_experiment", "model_source_experiment",
         "model_name", "adaptation", "experiment_viability_pass", "decision",
         "champion_selected", "v3_019_eligible", "current_sizing_multiplier",
         "champion_gate_version",

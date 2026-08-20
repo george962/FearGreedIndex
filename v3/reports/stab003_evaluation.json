@@ -1,0 +1,35 @@
+{
+  "as_of": "2026-08-18",
+  "champion_selected": false,
+  "current_sizing_multiplier": 1.0,
+  "dataset_sha256": "cbb80c8f8793ba9e64c53f9a4d9e6ca2792077be4ee6baee698787690341e27a",
+  "decision": "DO_NOT_ADVANCE_CONSENSUS_ABSTENTION_UNDER_STAB_003",
+  "development_evidence_only": true,
+  "evid001_outcomes_opened": false,
+  "feature_count": 53,
+  "feature_version": "v3-features-004-treasury",
+  "method_id": "STAB-003",
+  "method_viability_pass": false,
+  "note": "STAB-003 tests causal relationship consensus and abstention only. It cannot promote a model or consume untouched forward outcomes.",
+  "research_exposed_periods": [
+    "2024",
+    "2025",
+    "2026_ytd"
+  ],
+  "status": "STAB_003_EVALUATION_COMPLETE",
+  "target": "favorable_entry_20d",
+  "target_source_experiment": "EXP-006",
+  "v3_019_eligible": false,
+  "viability": {
+    "evid001_outcomes_sealed": true,
+    "favorable_lift_above_0_05_folds": 0,
+    "mean_roc_auc": 0.5521529678911737,
+    "minimum_fold_roc_auc": 0.5,
+    "roc_auc_above_0_52_folds": 1,
+    "sample_hashes_match_exp006": true,
+    "support_folds": 1,
+    "supported_fold_coverage_gate_pass": true,
+    "unfavorable_separation_above_0_05_folds": 0,
+    "viability_gate_pass": false
+  }
+}

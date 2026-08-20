@@ -5,6 +5,7 @@ on:
     paths:
       - "v3/evaluation/exp008_sentiment_extremes.py"
       - "v3/tests/test_exp008_sentiment_extremes.py"
+      - "v3/ci/check_exp006_evidence.py"
       - "v3/ci/check_exp008_evidence.py"
       - "v3/experiments/EXP-008/**"
       - "v3/checkpoints/EXP-008.md"
@@ -58,18 +59,15 @@ jobs:
         run: python -m v3.ci.run_treasury_feature_stage
 
       - name: Reproduce frozen EXP-006 samples
-        run: python -m v3.evaluation.exp006_opportunity
+        run: |
+          python -m v3.evaluation.exp006_opportunity
+          python -m v3.ci.check_exp006_evidence
 
-      - name: Run pre-registered EXP-008 evaluation
+      - name: Reproduce frozen EXP-008 evaluation
         run: python -m v3.evaluation.exp008_sentiment_extremes
 
-      - name: Verify committed EXP-008 evidence reproduces exactly
-        run: |
-          git diff --exit-code -- \
-            v3/reports/exp008_evaluation.json \
-            v3/reports/exp008_metrics.csv \
-            v3/reports/exp008_sentiment_diagnostics.csv
-          python -m v3.ci.check_exp008_evidence
+      - name: Verify committed EXP-008 evidence semantically reproduces
+        run: python -m v3.ci.check_exp008_evidence
 
       - name: Verify frozen v2.1 benchmark
         run: |
