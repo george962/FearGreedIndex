@@ -59,13 +59,15 @@ def compare_value(current: Any, frozen: Any, label: str) -> None:
 
 
 def compare_summary(current: dict[str, Any], frozen: dict[str, Any]) -> None:
+    # Whole generated-dataset hashes may change when rows strictly after the
+    # frozen 2026-08-18 research cutoff are appended. The frozen fold samples,
+    # complete 53x3 diagnostic tables, counts, and conclusions remain strict.
     exact_keys = (
         "diagnostic_id",
         "status",
         "as_of",
         "feature_version",
         "feature_count",
-        "dataset_sha256",
         "target",
         "folds",
         "sample_hashes_match_exp006",
