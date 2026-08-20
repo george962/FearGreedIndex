@@ -1,13 +1,17 @@
 {
   "method_id": "STAB-003",
-  "status": "pre_registered",
+  "status": "complete_reject",
   "pre_registered_issue": 70,
   "research_cutoff": "2026-08-18",
   "feature_set_version": "v3-features-004-treasury",
   "feature_count": 53,
   "target": "favorable_entry_20d",
   "target_source_experiment": "EXP-006",
-  "outer_folds": ["2024", "2025", "2026_ytd"],
+  "outer_folds": [
+    "2024",
+    "2025",
+    "2026_ytd"
+  ],
   "outer_folds_are_development_evidence_only": true,
   "evid001_outcomes_must_remain_sealed": true,
   "long_memory_contract": {
@@ -44,8 +48,8 @@
   },
   "abstention_contract": {
     "threshold_source": "legal_training_score_distribution_only",
-    "strong_unfavorable_quantile": 0.20,
-    "strong_favorable_quantile": 0.80,
+    "strong_unfavorable_quantile": 0.2,
+    "strong_favorable_quantile": 0.8,
     "middle_state": "ABSTAIN",
     "unsupported_fold_state": "ABSTAIN"
   },
@@ -58,10 +62,36 @@
     "minimum_favorable_lift_folds": 2,
     "minimum_unfavorable_separation_exclusive": 0.05,
     "minimum_unfavorable_separation_folds": 2,
-    "minimum_supported_fold_coverage_inclusive": 0.20,
+    "minimum_supported_fold_coverage_inclusive": 0.2,
     "maximum_supported_fold_coverage_inclusive": 0.55,
     "require_exp006_sample_hash_match": true,
     "require_evid001_outcomes_sealed": true
+  },
+  "evidence": {
+    "v3/reports/stab003_evaluation.json": "030ebc61a9872162404a86a62c02d472b05daf5f360f5467fa0cadc90a506dca",
+    "v3/reports/stab003_metrics.csv": "1df786fa0370701f7a0e7bab1fc95d76c4ed97c3358ac184d213d8fa3f8c6eee",
+    "v3/reports/stab003_consensus_features.csv": "cf914e1c8ed4361409bd37275ad132e41a6e0ff030c5af108768fa8c00b578c7"
+  },
+  "result": {
+    "decision": "DO_NOT_ADVANCE_CONSENSUS_ABSTENTION_UNDER_STAB_003",
+    "method_viability_pass": false,
+    "support_folds": 1,
+    "mean_roc_auc": 0.5521529678911737,
+    "roc_auc_above_0_52_folds": 1,
+    "minimum_fold_roc_auc": 0.5,
+    "favorable_lift_above_0_05_folds": 0,
+    "unfavorable_separation_above_0_05_folds": 0,
+    "supported_fold_coverage_gate_pass": true,
+    "sample_hashes_match_exp006": true,
+    "evid001_outcomes_sealed": true
+  },
+  "interpretation": {
+    "ranking_signal_observed": true,
+    "supported_2024_auc": 0.6564589036735213,
+    "supported_2024_strong_favorable_calls": 0,
+    "supported_2024_strong_unfavorable_calls": 130,
+    "later_fold_family_diversity_collapsed": true,
+    "next_hypothesis": "causal_recent_score_normalization_and_redundancy_aware_independence"
   },
   "pass_effect": "justify_pre_registration_of_EXP-010_only",
   "champion_selected": false,
