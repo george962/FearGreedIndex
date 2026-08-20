@@ -88,7 +88,10 @@ def select_short_memory_features(
     ordered = train.sort_values("decision_date").tail(SHORT_MAX_ROWS).copy()
     if len(ordered) < SHORT_MIN_ROWS:
         return [], []
-    blocks = [ordered.iloc[index].copy() for index in np.array_split(np.arange(len(ordered)), SHORT_BLOCKS)]
+    blocks = [
+        ordered.iloc[index].copy()
+        for index in np.array_split(np.arange(len(ordered)), SHORT_BLOCKS)
+    ]
 
     selected: list[dict[str, Any]] = []
     diagnostics: list[dict[str, Any]] = []
@@ -102,7 +105,11 @@ def select_short_memory_features(
         signs = [_sign(value) for value in correlations]
         same_sign = bool(signs[0] != 0 and signs.count(signs[0]) == SHORT_BLOCKS)
         finite_abs = [abs(value) for value in correlations if np.isfinite(value)]
-        median_abs = float(np.median(finite_abs)) if len(finite_abs) == SHORT_BLOCKS else float("nan")
+        median_abs = (
+            float(np.median(finite_abs))
+            if len(finite_abs) == SHORT_BLOCKS
+            else float("nan")
+        )
         supported = bool(all(count >= MIN_BLOCK_ROWS for count in counts))
         eligible = bool(
             supported
@@ -159,7 +166,9 @@ def build_consensus(
                 "consensus_weight": float(math.sqrt(long_weight * short_weight)),
             }
         )
-    consensus.sort(key=lambda item: (-float(item["consensus_weight"]), str(item["feature"])))
+    consensus.sort(
+        key=lambda item: (-float(item["consensus_weight"]), str(item["feature"]))
+    )
     return consensus
 
 
@@ -170,7 +179,9 @@ def consensus_score(
 ) -> np.ndarray:
     if not consensus:
         return np.zeros(len(frame), dtype=float)
-    total_weight = float(sum(abs(float(item["consensus_weight"])) for item in consensus))
+    total_weight = float(
+        sum(abs(float(item["consensus_weight"])) for item in consensus)
+    )
     if total_weight <= 0:
         return np.zeros(len(frame), dtype=float)
     score = np.zeros(len(frame), dtype=float)
@@ -218,8 +229,7 @@ def _expected_exp006_hashes() -> dict[str, str]:
 
 def evid001_outcomes_are_sealed() -> bool:
     payload = json.loads(EVID001_CHECKPOINTS.read_text(encoding="utf-8"))
-    checkpoints = payload.get("checkpoints", [])
-    return bool(len(checkpoints) == 0)
+    return bool(len(payload.get("checkpoints", [])) == 0)
 
 
 def summarize(metrics: pd.DataFrame) -> dict[str, Any]:
@@ -229,11 +239,21 @@ def summarize(metrics: pd.DataFrame) -> dict[str, Any]:
     mean_auc = float(metrics["roc_auc"].mean())
     auc_above = int(metrics["roc_auc"].gt(0.52).sum())
     minimum_auc = float(metrics["roc_auc"].min())
-    favorable_lift_folds = int(supported["favorable_lift"].gt(0.05).sum()) if not supported.empty else 0
-    unfavorable_separation_folds = int(supported["unfavorable_separation"].gt(0.05).sum()) if not supported.empty else 0
+    favorable_lift_folds = (
+        int(supported["favorable_lift"].gt(0.05).sum())
+        if not supported.empty
+        else 0
+    )
+    unfavorable_separation_folds = (
+        int(supported["unfavorable_separation"].gt(0.05).sum())
+        if not supported.empty
+        else 0
+    )
     coverage_pass = bool(
         not supported.empty
-        and supported["non_abstain_coverage"].between(0.20, 0.55, inclusive="both").all()
+        and supported["non_abstain_coverage"]
+        .between(0.20, 0.55, inclusive="both")
+        .all()
     )
     hashes_match = bool(metrics["sample_hash_matches_exp006"].all())
     evid_sealed = evid001_outcomes_are_sealed()
@@ -264,8 +284,8 @@ def summarize(metrics: pd.DataFrame) -> dict[str, Any]:
 
 def run() -> dict[str, Any]:
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    if manifest.get("status") != "pre_registered":
-        raise ValueError("STAB-003 manifest must be pre-registered before evaluation")
+    if manifest.get("status") not in {"pre_registered", "complete_reject"}:
+        raise ValueError("STAB-003 manifest status is invalid for evaluation/reproduction")
     config = json.loads(CONFIG.read_text(encoding="utf-8"))
     folds = config.get("validation", {}).get("folds", [])
     if len(folds) != 3:
@@ -274,7 +294,9 @@ def run() -> dict[str, Any]:
         raise ValueError("STAB-003 refuses to run after EVID-001 outcomes are opened")
 
     frame = pd.read_parquet(DATASET, engine="pyarrow").copy()
-    frame["decision_date"] = pd.to_datetime(frame["decision_date"], errors="raise").dt.normalize()
+    frame["decision_date"] = pd.to_datetime(
+        frame["decision_date"], errors="raise"
+    ).dt.normalize()
     frame = frame.sort_values("decision_date").reset_index(drop=True)
     frame = add_opportunity_targets(frame)
     feature_version, features = load_feature_registry(REGISTRY)
@@ -302,7 +324,9 @@ def run() -> dict[str, Any]:
         short_selected, _ = select_short_memory_features(train, features)
         consensus = build_consensus(long_selected, short_selected)
         families = {str(item["family"]) for item in consensus}
-        support_pass = bool(len(consensus) >= MIN_FEATURES and len(families) >= MIN_FAMILIES)
+        support_pass = bool(
+            len(consensus) >= MIN_FEATURES and len(families) >= MIN_FAMILIES
+        )
 
         for item in consensus:
             row = dict(item)
@@ -318,11 +342,27 @@ def run() -> dict[str, Any]:
             auc = float(roc_auc_score(y_test, test_scores))
             favorable_mask = states == "STRONG_FAVORABLE"
             unfavorable_mask = states == "STRONG_UNFAVORABLE"
-            favorable_prev = float(np.mean(y_test[favorable_mask])) if favorable_mask.any() else float("nan")
-            unfavorable_prev = float(np.mean(y_test[unfavorable_mask])) if unfavorable_mask.any() else float("nan")
+            favorable_prev = (
+                float(np.mean(y_test[favorable_mask]))
+                if favorable_mask.any()
+                else float("nan")
+            )
+            unfavorable_prev = (
+                float(np.mean(y_test[unfavorable_mask]))
+                if unfavorable_mask.any()
+                else float("nan")
+            )
             coverage = float(np.mean(states != "ABSTAIN"))
-            favorable_lift = favorable_prev - base_rate if np.isfinite(favorable_prev) else float("nan")
-            unfavorable_separation = base_rate - unfavorable_prev if np.isfinite(unfavorable_prev) else float("nan")
+            favorable_lift = (
+                favorable_prev - base_rate
+                if np.isfinite(favorable_prev)
+                else float("nan")
+            )
+            unfavorable_separation = (
+                base_rate - unfavorable_prev
+                if np.isfinite(unfavorable_prev)
+                else float("nan")
+            )
             favorable_count = int(favorable_mask.sum())
             unfavorable_count = int(unfavorable_mask.sum())
         else:
@@ -369,7 +409,9 @@ def run() -> dict[str, Any]:
                 "favorable_lift": favorable_lift,
                 "unfavorable_separation": unfavorable_separation,
                 "non_abstain_coverage": coverage,
-                "consensus_features": "|".join(str(item["feature"]) for item in consensus),
+                "consensus_features": "|".join(
+                    str(item["feature"]) for item in consensus
+                ),
             }
         )
 
@@ -405,7 +447,9 @@ def run() -> dict[str, Any]:
     METRICS.parent.mkdir(parents=True, exist_ok=True)
     metrics.to_csv(METRICS, index=False, lineterminator="\n")
     features_frame.to_csv(FEATURES_OUT, index=False, lineterminator="\n")
-    EVALUATION.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+    EVALUATION.write_text(
+        json.dumps(report, indent=2, sort_keys=True), encoding="utf-8"
+    )
     print(json.dumps(report, indent=2, sort_keys=True))
     return report
 
