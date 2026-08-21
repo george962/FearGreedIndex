@@ -1,6 +1,6 @@
 {
   "method_id": "STAB-004",
-  "status": "pre_registered",
+  "status": "complete_reject",
   "pre_registered_issue": 72,
   "research_cutoff": "2026-08-18",
   "feature_set_version": "v3-features-004-treasury",
@@ -51,6 +51,26 @@
     "maximum_supported_fold_coverage_inclusive": 0.55,
     "require_exp006_sample_hash_match": true,
     "require_evid001_outcomes_sealed": true
+  },
+  "result": {
+    "decision": "DO_NOT_ADVANCE_CAUSAL_ROLLING_NORMALIZATION_UNDER_STAB_004",
+    "method_viability_pass": false,
+    "support_folds": 3,
+    "mean_roc_auc": 0.6716860053321619,
+    "minimum_fold_roc_auc": 0.6214426688737507,
+    "roc_auc_above_0_52_folds": 3,
+    "favorable_enrichment_above_0_05_folds": 2,
+    "unfavorable_depletion_above_0_05_folds": 2,
+    "call_count_gate_pass": true,
+    "coverage_gate_pass": false,
+    "coverage_failure": "2025 non-abstain coverage 0.552 exceeded frozen maximum 0.55",
+    "sample_hashes_match_exp006": true,
+    "evid001_outcomes_sealed": true
+  },
+  "evidence": {
+    "v3/reports/stab004_evaluation.json": "721c8b3a5ea01f82747a26bcdbb197b05cb53b81fcd5abd088ec4de300ce7067",
+    "v3/reports/stab004_metrics.csv": "20cd4e448c875fdf7fe9b850faac6b4ac3feea0d19a0517ca9baaa366195ae27",
+    "v3/reports/stab004_redundancy_clusters.csv": "7cc76ad185d0ae33537f84d8f9d4e651eed40a26695103ab46faa0fe99df7210"
   },
   "pass_effect": "justify_pre_registration_of_EXP-010_only",
   "champion_selected": false,
