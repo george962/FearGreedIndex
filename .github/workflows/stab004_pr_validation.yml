@@ -1,0 +1,107 @@
+name: Validate STAB-004 Rolling Normalization
+
+on:
+  pull_request:
+    paths:
+      - "v3/evaluation/stab004_rolling_normalization.py"
+      - "v3/tests/test_stab004_rolling_normalization.py"
+      - "v3/methodology/STAB-004/**"
+      - "v3/reports/stab004_*"
+      - "v3/evaluation/stab003_consensus_abstention.py"
+      - "v3/evaluation/stab001_past_only.py"
+      - "v3/evaluation/exp006_opportunity.py"
+      - "v3/evidence/**"
+      - "v3/features/**"
+      - "v3/labels/**"
+      - "v3/models/common.py"
+      - "config.json"
+      - "requirements.txt"
+      - ".github/workflows/stab004_pr_validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fear-greed-stab004-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate_stab004:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run STAB-004 unit tests
+        run: |
+          python -m unittest -v \
+            v3.tests.test_exp006_opportunity \
+            v3.tests.test_stab001_past_only \
+            v3.tests.test_stab003_consensus_abstention \
+            v3.tests.test_stab004_rolling_normalization
+
+      - name: Build frozen baseline dataset
+        run: |
+          python -m v3.features.build_features
+          python -m v3.labels.build_labels
+          python -m v3.evaluation.validate_dataset
+
+      - name: Reconstruct retained Treasury dataset
+        run: python -m v3.ci.run_treasury_feature_stage
+
+      - name: Reproduce frozen EXP-006 samples
+        run: python -m v3.evaluation.exp006_opportunity
+
+      - name: Verify frozen STAB-001 and STAB-003 evidence
+        run: |
+          python -m v3.evaluation.stab001_past_only
+          python -m v3.ci.check_stab001_evidence
+          python -m v3.evaluation.stab003_consensus_abstention
+          python -m v3.ci.check_stab003_evidence
+
+      - name: Verify EVID-001 remains sealed
+        run: python -m v3.evidence.verify_forward_lane
+
+      - name: Run STAB-004 evaluation
+        run: python -m v3.evaluation.stab004_rolling_normalization
+
+      - name: Print STAB-004 evidence
+        shell: bash
+        run: |
+          cat v3/reports/stab004_evaluation.json
+          cat v3/reports/stab004_metrics.csv
+          cat v3/reports/stab004_redundancy_clusters.csv
+
+      - name: Verify frozen v2.1 benchmark
+        run: |
+          python -m v3.baseline.freeze_v2_1
+          git diff --exit-code -- reports/baseline_v2_1/
+
+      - name: Upload STAB-004 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stab004-evidence-${{ github.run_id }}
+          path: |
+            v3/reports/stab004_evaluation.json
+            v3/reports/stab004_metrics.csv
+            v3/reports/stab004_redundancy_clusters.csv
+            v3/reports/stab004_scores.csv
+            v3/methodology/STAB-004/manifest.json
+          if-no-files-found: warn
+          retention-days: 90
