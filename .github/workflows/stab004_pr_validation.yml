@@ -5,8 +5,10 @@ on:
     paths:
       - "v3/evaluation/stab004_rolling_normalization.py"
       - "v3/tests/test_stab004_rolling_normalization.py"
+      - "v3/ci/check_stab004_evidence.py"
       - "v3/methodology/STAB-004/**"
       - "v3/reports/stab004_*"
+      - "v3/checkpoints/STAB-004.md"
       - "v3/evaluation/stab003_consensus_abstention.py"
       - "v3/evaluation/stab001_past_only.py"
       - "v3/evaluation/exp006_opportunity.py"
@@ -77,8 +79,11 @@ jobs:
       - name: Verify EVID-001 remains sealed
         run: python -m v3.evidence.verify_forward_lane
 
-      - name: Run STAB-004 evaluation
+      - name: Reproduce STAB-004 evaluation
         run: python -m v3.evaluation.stab004_rolling_normalization
+
+      - name: Verify frozen STAB-004 evidence
+        run: python -m v3.ci.check_stab004_evidence
 
       - name: Print STAB-004 evidence
         shell: bash
@@ -103,5 +108,6 @@ jobs:
             v3/reports/stab004_redundancy_clusters.csv
             v3/reports/stab004_scores.csv
             v3/methodology/STAB-004/manifest.json
+            v3/checkpoints/STAB-004.md
           if-no-files-found: warn
           retention-days: 90
