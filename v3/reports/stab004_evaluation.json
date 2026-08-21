@@ -1,0 +1,35 @@
+{
+  "method_id": "STAB-004",
+  "as_of": "2026-08-18 00:00:00",
+  "status": "complete_reject",
+  "feature_version": "v3-features-004-treasury",
+  "feature_count": 53,
+  "target": "favorable_entry_20d",
+  "target_source_experiment": "EXP-006",
+  "relationship_source_method": "STAB-003",
+  "method_viability_pass": false,
+  "decision": "DO_NOT_ADVANCE_CAUSAL_ROLLING_NORMALIZATION_UNDER_STAB_004",
+  "development_evidence_only": true,
+  "research_exposed_periods": [
+    "2024",
+    "2025",
+    "2026_ytd"
+  ],
+  "evid001_outcomes_opened": false,
+  "champion_selected": false,
+  "v3_019_eligible": false,
+  "current_sizing_multiplier": 1.0,
+  "viability": {
+    "support_folds": 3,
+    "mean_roc_auc": 0.6716860053321619,
+    "roc_auc_above_0_52_folds": 3,
+    "minimum_fold_roc_auc": 0.6214426688737507,
+    "favorable_enrichment_above_0_05_folds": 2,
+    "unfavorable_depletion_above_0_05_folds": 2,
+    "supported_fold_call_count_gate_pass": true,
+    "supported_fold_coverage_gate_pass": false,
+    "sample_hashes_match_exp006": true,
+    "evid001_outcomes_sealed": true,
+    "viability_gate_pass": false
+  }
+}
