@@ -1,0 +1,62 @@
+name: Validate V3 Shadow Dashboard
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/v3_shadow_dashboard_pr_validation.yml"
+      - ".github/workflows/deploy-pages.yml"
+      - "scripts/build_dashboard.py"
+      - "scripts/build_v3_challenger.py"
+      - "test_dashboard.py"
+      - "test_v3_challenger.py"
+      - "v3/evidence/forward_feature_ledger.csv"
+      - "v3/evidence/forward_checkpoints.json"
+      - "v3/data/model_dataset_treasury.parquet"
+      - "v3/reports/feature_registry_treasury.json"
+      - "v3/reports/stab004_evaluation.json"
+      - "v3/evaluation/stab001_past_only.py"
+      - "v3/evaluation/stab003_consensus_abstention.py"
+      - "v3/evaluation/stab004_rolling_normalization.py"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Run dashboard isolation tests
+        run: python -m unittest -v test_dashboard.py test_v3_challenger.py
+      - name: Build production dashboard
+        run: python scripts/build_dashboard.py
+      - name: Build V3 shadow challenger
+        run: python scripts/build_v3_challenger.py
+      - name: Verify production isolation and shadow artifact
+        run: |
+          test -f site/analysis.json
+          test -f site/v3_challenger.json
+          grep -q 'id="v3-research-challenger"' site/index.html
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          shadow = json.loads(Path("site/v3_challenger.json").read_text())
+          assert shadow["mode"] == "RESEARCH_ONLY"
+          assert shadow["production_effect"] == "NONE"
+          assert shadow["guardrails"]["evid001_outcomes_opened"] is False
+          assert shadow["guardrails"]["champion_selected"] is False
+          assert shadow["guardrails"]["v3_019_eligible"] is False
+          assert shadow["guardrails"]["sizing_multiplier"] == 1.0
+          assert shadow["guardrails"]["production_action_changed"] is False
+          PY
