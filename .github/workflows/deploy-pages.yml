@@ -21,11 +21,14 @@ on:
       - "test_v3_challenger.py"
       - "v3/evidence/forward_feature_ledger.csv"
       - "v3/evidence/forward_checkpoints.json"
+      - "v3/features/**"
+      - "v3/labels/**"
       - "v3/reports/feature_registry_treasury.json"
       - "v3/reports/stab004_evaluation.json"
       - "v3/evaluation/stab001_past_only.py"
       - "v3/evaluation/stab003_consensus_abstention.py"
       - "v3/evaluation/stab004_rolling_normalization.py"
+      - "v3/ci/run_treasury_feature_stage.py"
   workflow_dispatch:
   workflow_run:
     workflows:
@@ -49,7 +52,7 @@ jobs:
       github.event_name != 'workflow_run' ||
       github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - name: Check out current main
@@ -92,6 +95,16 @@ jobs:
 
       - name: Generate static dashboard
         run: python scripts/build_dashboard.py
+
+      - name: Reconstruct frozen V3 Treasury dataset
+        run: |
+          python -m v3.features.build_features
+          python -m v3.labels.build_labels
+          python -m v3.evaluation.validate_dataset
+          python -m v3.ci.run_treasury_feature_stage
+
+      - name: Verify EVID-001 remains sealed
+        run: python -m v3.evidence.verify_forward_lane
 
       - name: Add research-only V3 challenger
         run: python scripts/build_v3_challenger.py
