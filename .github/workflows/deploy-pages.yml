@@ -14,9 +14,18 @@ on:
       - "config.json"
       - "requirements.txt"
       - "scripts/build_dashboard.py"
+      - "scripts/build_v3_challenger.py"
       - "test_feargreed.py"
       - "test_fear_greed_market_data.py"
       - "test_dashboard.py"
+      - "test_v3_challenger.py"
+      - "v3/evidence/forward_feature_ledger.csv"
+      - "v3/evidence/forward_checkpoints.json"
+      - "v3/reports/feature_registry_treasury.json"
+      - "v3/reports/stab004_evaluation.json"
+      - "v3/evaluation/stab001_past_only.py"
+      - "v3/evaluation/stab003_consensus_abstention.py"
+      - "v3/evaluation/stab004_rolling_normalization.py"
   workflow_dispatch:
   workflow_run:
     workflows:
@@ -58,6 +67,9 @@ jobs:
             "data/fear_greed_daily.csv"
             "data/spx_daily.csv"
             "scripts/build_dashboard.py"
+            "scripts/build_v3_challenger.py"
+            "v3/evidence/forward_feature_ledger.csv"
+            "v3/reports/stab004_evaluation.json"
           )
           for file in "${required_files[@]}"; do
             test -f "$file" || { echo "::error file=$file::Missing $file"; exit 1; }
@@ -76,18 +88,31 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Run repository tests
-        run: python -m unittest -v test_feargreed.py test_fear_greed_market_data.py test_dashboard.py
+        run: python -m unittest -v test_feargreed.py test_fear_greed_market_data.py test_dashboard.py test_v3_challenger.py
 
       - name: Generate static dashboard
         run: python scripts/build_dashboard.py
+
+      - name: Add research-only V3 challenger
+        run: python scripts/build_v3_challenger.py
 
       - name: Verify generated website
         shell: bash
         run: |
           set -euo pipefail
-          for file in site/index.html site/styles.css site/app.js site/version.json site/analysis.json; do
+          for file in site/index.html site/styles.css site/app.js site/version.json site/analysis.json site/v3_challenger.json; do
             test -f "$file" || { echo "::error file=$file::Missing generated file"; exit 1; }
           done
+          grep -q 'id="v3-research-challenger"' site/index.html
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path("site/v3_challenger.json").read_text())
+          assert payload["mode"] == "RESEARCH_ONLY"
+          assert payload["production_effect"] == "NONE"
+          assert payload["guardrails"]["production_action_changed"] is False
+          assert payload["guardrails"]["sizing_multiplier"] == 1.0
+          PY
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
