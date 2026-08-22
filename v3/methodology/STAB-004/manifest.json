@@ -1,0 +1,80 @@
+{
+  "method_id": "STAB-004",
+  "status": "complete_reject",
+  "pre_registered_issue": 72,
+  "research_cutoff": "2026-08-18",
+  "feature_set_version": "v3-features-004-treasury",
+  "feature_count": 53,
+  "target": "favorable_entry_20d",
+  "target_source_experiment": "EXP-006",
+  "relationship_source_method": "STAB-003",
+  "outer_folds": ["2024", "2025", "2026_ytd"],
+  "outer_folds_are_development_evidence_only": true,
+  "evid001_outcomes_must_remain_sealed": true,
+  "relationship_selection_contract": "reuse_STAB_003_long_short_consensus_exactly",
+  "redundancy_contract": {
+    "dependence_measure": "absolute_spearman",
+    "edge_threshold_inclusive": 0.90,
+    "cluster_rule": "deterministic_connected_components",
+    "representative_rule": "highest_consensus_weight_then_lexicographic_feature_name",
+    "minimum_representative_clusters": 3,
+    "training_rows_only": true
+  },
+  "score_contract": {
+    "feature_transform": "full_legal_training_empirical_percentile",
+    "center": 0.5,
+    "weight_source": "STAB_003_consensus_weight",
+    "normalization": "sum_absolute_representative_weights",
+    "output": "ranking_score_not_probability"
+  },
+  "rolling_normalization_contract": {
+    "reference_window_decision_scores": 252,
+    "minimum_reference_scores": 126,
+    "reference_dates_must_be_strictly_before_current_date": true,
+    "prior_test_scores_allowed": true,
+    "outcomes_or_labels_used": false,
+    "strong_unfavorable_percentile_max": 0.20,
+    "strong_favorable_percentile_min": 0.80,
+    "middle_state": "ABSTAIN"
+  },
+  "viability_gate": {
+    "minimum_support_folds": 2,
+    "minimum_mean_roc_auc_exclusive": 0.55,
+    "minimum_roc_auc_above_0_52_folds": 2,
+    "minimum_fold_roc_auc_inclusive": 0.45,
+    "minimum_favorable_enrichment_exclusive": 0.05,
+    "minimum_favorable_enrichment_folds": 2,
+    "minimum_unfavorable_depletion_exclusive": 0.05,
+    "minimum_unfavorable_depletion_folds": 2,
+    "minimum_calls_per_strong_side": 15,
+    "minimum_supported_fold_coverage_inclusive": 0.25,
+    "maximum_supported_fold_coverage_inclusive": 0.55,
+    "require_exp006_sample_hash_match": true,
+    "require_evid001_outcomes_sealed": true
+  },
+  "result": {
+    "decision": "DO_NOT_ADVANCE_CAUSAL_ROLLING_NORMALIZATION_UNDER_STAB_004",
+    "method_viability_pass": false,
+    "support_folds": 3,
+    "mean_roc_auc": 0.6716860053321619,
+    "minimum_fold_roc_auc": 0.6214426688737507,
+    "roc_auc_above_0_52_folds": 3,
+    "favorable_enrichment_above_0_05_folds": 2,
+    "unfavorable_depletion_above_0_05_folds": 2,
+    "call_count_gate_pass": true,
+    "coverage_gate_pass": false,
+    "coverage_failure": "2025 non-abstain coverage 0.552 exceeded frozen maximum 0.55",
+    "sample_hashes_match_exp006": true,
+    "evid001_outcomes_sealed": true
+  },
+  "evidence": {
+    "v3/reports/stab004_evaluation.json": "721c8b3a5ea01f82747a26bcdbb197b05cb53b81fcd5abd088ec4de300ce7067",
+    "v3/reports/stab004_metrics.csv": "20cd4e448c875fdf7fe9b850faac6b4ac3feea0d19a0517ca9baaa366195ae27",
+    "v3/reports/stab004_redundancy_clusters.csv": "7cc76ad185d0ae33537f84d8f9d4e651eed40a26695103ab46faa0fe99df7210"
+  },
+  "pass_effect": "justify_pre_registration_of_EXP-010_only",
+  "champion_selected": false,
+  "v3_019_eligible": false,
+  "sizing_multiplier": 1.0,
+  "tuning_after_result_allowed_under_same_version": false
+}
