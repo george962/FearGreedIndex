@@ -11,8 +11,13 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import sys
 from pathlib import Path
 from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import numpy as np
 import pandas as pd
@@ -32,7 +37,6 @@ from v3.evaluation.stab004_rolling_normalization import (
 )
 from v3.models.common import load_feature_registry, validate_feature_columns
 
-ROOT = Path(__file__).resolve().parents[1]
 HISTORICAL_DATASET = ROOT / "v3" / "data" / "model_dataset_treasury.parquet"
 FEATURE_REGISTRY = ROOT / "v3" / "reports" / "feature_registry_treasury.json"
 FORWARD_LEDGER = ROOT / "v3" / "evidence" / "forward_feature_ledger.csv"
