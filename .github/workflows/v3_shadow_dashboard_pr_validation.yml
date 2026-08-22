@@ -12,12 +12,14 @@ on:
       - "test_v3_challenger.py"
       - "v3/evidence/forward_feature_ledger.csv"
       - "v3/evidence/forward_checkpoints.json"
-      - "v3/data/model_dataset_treasury.parquet"
+      - "v3/features/**"
+      - "v3/labels/**"
       - "v3/reports/feature_registry_treasury.json"
       - "v3/reports/stab004_evaluation.json"
       - "v3/evaluation/stab001_past_only.py"
       - "v3/evaluation/stab003_consensus_abstention.py"
       - "v3/evaluation/stab004_rolling_normalization.py"
+      - "v3/ci/run_treasury_feature_stage.py"
 
 permissions:
   contents: read
@@ -25,7 +27,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -41,6 +43,14 @@ jobs:
         run: python -m unittest -v test_dashboard.py test_v3_challenger.py
       - name: Build production dashboard
         run: python scripts/build_dashboard.py
+      - name: Reconstruct frozen V3 Treasury dataset
+        run: |
+          python -m v3.features.build_features
+          python -m v3.labels.build_labels
+          python -m v3.evaluation.validate_dataset
+          python -m v3.ci.run_treasury_feature_stage
+      - name: Verify EVID-001 remains sealed
+        run: python -m v3.evidence.verify_forward_lane
       - name: Build V3 shadow challenger
         run: python scripts/build_v3_challenger.py
       - name: Verify production isolation and shadow artifact
@@ -59,4 +69,5 @@ jobs:
           assert shadow["guardrails"]["v3_019_eligible"] is False
           assert shadow["guardrails"]["sizing_multiplier"] == 1.0
           assert shadow["guardrails"]["production_action_changed"] is False
+          print(json.dumps(shadow, indent=2))
           PY
