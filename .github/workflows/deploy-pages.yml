@@ -3,7 +3,7 @@ name: Deploy Fear & Greed Dashboard
 run-name: >-
   Deploy Fear & Greed Dashboard —
   ${{ github.event_name == 'workflow_dispatch' && 'manual run'
-      || github.event_name == 'workflow_run' && 'dataset workflow completed'
+      || github.event_name == 'workflow_run' && 'upstream evidence/data workflow completed'
       || format('push by {0}', github.actor) }}
 
 on:
@@ -37,6 +37,7 @@ on:
   workflow_run:
     workflows:
       - Update Fear and Greed SPX Dataset
+      - Collect Untouched Forward Evidence
     types: [completed]
     branches: [main]
 
