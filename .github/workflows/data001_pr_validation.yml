@@ -118,8 +118,10 @@ jobs:
             v3/data/long_history/source_manifest.json \
             v3/data/long_history/spx_daily.csv.gz \
             v3/data/long_history/vix_daily.csv.gz \
-            v3/data/long_history/treasury_daily.csv.gz \
-            v3/reports/data001_summary.json
+            v3/data/long_history/treasury_daily.csv.gz
+          # Reports are ignored by default because most are rebuild artifacts.
+          # DATA-001's compact summary is deliberate frozen evidence, so add it explicitly.
+          git add -f v3/reports/data001_summary.json
 
           if git diff --cached --quiet; then
             echo "DATA-001 frozen evidence is already committed."
