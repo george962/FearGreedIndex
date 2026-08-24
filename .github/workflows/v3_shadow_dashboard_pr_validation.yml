@@ -6,7 +6,7 @@ on:
     paths:
       - ".github/workflows/v3_shadow_dashboard_pr_validation.yml"
       - ".github/workflows/deploy-pages.yml"
-      - ".github/workflows/shadow_prediction_collect.yml"
+      - ".github/workflows/forward_evidence_collect.yml"
       - "scripts/build_dashboard.py"
       - "scripts/build_v3_challenger.py"
       - "test_dashboard.py"
