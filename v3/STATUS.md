@@ -44,7 +44,7 @@
 | STAB-003 Long/short consensus + abstention | COMPLETE — REJECT / ADAPTIVE RANKING CLUE | issue #70 / PR #71; 2024 supported AUC ~0.656, but support only 1/3 folds and fixed training score thresholds shifted out of distribution |
 | STAB-004 Causal rolling normalization + redundancy control | COMPLETE — REJECT / STRONG RANKING EVIDENCE | issue #72 / PR #73; AUC `0.621 / 0.662 / 0.731`, mean ~`0.672`; frozen gate failed because 2025 coverage `0.552` exceeded `0.55`; no retuning |
 | V3 shadow dashboard visibility | COMPLETE | issue #74 / PR #75; STAB-004 challenger visible as `RESEARCH ONLY / NO PRODUCTION EFFECT`; production engine unchanged |
-| V3-021 Immutable shadow prediction history | COMPLETE IMPLEMENTATION / VALIDATION IN PR | issue #76 / PR #77; hash-chained point-in-time prediction ledger, production-vs-V3 dashboard history, atomic forward collection |
+| V3-021 Immutable shadow prediction history | COMPLETE | issue #76 / PR #77; hash-chained point-in-time prediction ledger, production-vs-V3 dashboard history, atomic forward collection; all final-head checks passed before merge |
 
 ## Blocked / deferred
 
@@ -96,11 +96,11 @@ See `v3/experiments/README.md`, `v3/diagnostics/README.md`, and `v3/evidence/REA
 
 ## Next
 
-1. Finish PR #77 and verify the immutable shadow prediction/dashboard pipeline on `main` before changing any STAB/ADAPT methodology.
+1. Keep the merged V3-021 pipeline unchanged while it accumulates immutable forward shadow predictions; do not change STAB/ADAPT methodology inside this evidence lane.
 2. Keep collecting EVID-001 feature evidence **and the matching frozen STAB-004 shadow prediction** without opening forward outcomes.
 3. Do **not** relax STAB-004 thresholds or reinterpret its failed viability gate. Treat it as the frozen benchmark challenger for shadow observation.
 4. Do **not** proceed to V3-019 or empirical sizing; production remains v2.1 at `1.00x`.
-5. After the shadow infrastructure is stable, prioritize additional never-used regime evidence (the DATA-001 / long-history core-market work) before another adaptive methodology iteration. The purpose is to test whether the ranking relationship survives substantially different market regimes rather than repeatedly optimizing 2024–2026.
+5. Prioritize additional never-used regime evidence (the DATA-001 / long-history core-market work) before another adaptive methodology iteration. The purpose is to test whether the ranking relationship survives substantially different market regimes rather than repeatedly optimizing 2024–2026.
 6. If a future STAB/ADAPT successor is pursued, give it a new pre-registered methodology ID and keep the STAB-004 shadow ledger immutable. Never rewrite historical STAB-004 calls with the successor.
 7. Keep EVID-001 outcomes sealed until a deliberately pre-registered checkpoint-opening decision. A later opening evaluates what the frozen challenger actually predicted; it must not be used retroactively to redesign those predictions.
 8. V3-014 breadth may resume only with a valid point-in-time source; credit spreads remain source/license gated.
