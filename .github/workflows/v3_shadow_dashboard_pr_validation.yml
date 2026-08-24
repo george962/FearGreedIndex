@@ -6,16 +6,21 @@ on:
     paths:
       - ".github/workflows/v3_shadow_dashboard_pr_validation.yml"
       - ".github/workflows/deploy-pages.yml"
+      - ".github/workflows/forward_evidence_collect.yml"
       - "scripts/build_dashboard.py"
       - "scripts/build_v3_challenger.py"
       - "test_dashboard.py"
       - "test_v3_challenger.py"
       - "v3/evidence/forward_feature_ledger.csv"
       - "v3/evidence/forward_checkpoints.json"
+      - "v3/evidence/shadow_prediction_ledger.csv"
+      - "v3/evidence/shadow_predictions.py"
+      - "v3/tests/test_shadow_predictions.py"
       - "v3/features/**"
       - "v3/labels/**"
       - "v3/reports/feature_registry_treasury.json"
       - "v3/reports/stab004_evaluation.json"
+      - "v3/methodology/STAB-004/manifest.json"
       - "v3/evaluation/stab001_past_only.py"
       - "v3/evaluation/stab003_consensus_abstention.py"
       - "v3/evaluation/stab004_rolling_normalization.py"
@@ -27,7 +32,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -35,32 +40,69 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: requirements.txt
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
-      - name: Run dashboard isolation tests
-        run: python -m unittest -v test_dashboard.py test_v3_challenger.py
+
+      - name: Run dashboard and shadow-ledger tests
+        run: |
+          python -m unittest -v \
+            test_dashboard.py \
+            test_v3_challenger.py \
+            v3.tests.test_shadow_predictions
+
       - name: Build production dashboard
         run: python scripts/build_dashboard.py
+
+      - name: Freeze production analysis hash
+        shell: bash
+        run: sha256sum site/analysis.json | cut -d' ' -f1 > /tmp/analysis.sha256
+
       - name: Reconstruct frozen V3 Treasury dataset
         run: |
           python -m v3.features.build_features
           python -m v3.labels.build_labels
           python -m v3.evaluation.validate_dataset
           python -m v3.ci.run_treasury_feature_stage
+
       - name: Verify EVID-001 remains sealed
         run: python -m v3.evidence.verify_forward_lane
-      - name: Build V3 shadow challenger
-        run: python scripts/build_v3_challenger.py
-      - name: Verify production isolation and shadow artifact
+
+      - name: Generate immutable shadow prediction ledger
         run: |
+          python -m v3.evidence.shadow_predictions collect
+          python -m v3.evidence.shadow_predictions verify
+          cp v3/evidence/shadow_prediction_ledger.csv /tmp/shadow_prediction_ledger.first.csv
+
+      - name: Prove shadow collection is idempotent
+        run: |
+          python -m v3.evidence.shadow_predictions collect
+          cmp /tmp/shadow_prediction_ledger.first.csv v3/evidence/shadow_prediction_ledger.csv
+          python -m v3.evidence.shadow_predictions verify
+
+      - name: Print generated shadow ledger
+        run: cat v3/evidence/shadow_prediction_ledger.csv
+
+      - name: Build V3 shadow challenger from committed-form ledger
+        run: python scripts/build_v3_challenger.py
+
+      - name: Verify production isolation and shadow history
+        shell: bash
+        run: |
+          set -euo pipefail
           test -f site/analysis.json
           test -f site/v3_challenger.json
+          test -f site/v3_challenger_history.csv
+          test "$(sha256sum site/analysis.json | cut -d' ' -f1)" = "$(cat /tmp/analysis.sha256)"
           grep -q 'id="v3-research-challenger"' site/index.html
+          grep -q 'IMMUTABLE SHADOW MODE' site/index.html
           python - <<'PY'
+          import csv
           import json
           from pathlib import Path
+
           shadow = json.loads(Path("site/v3_challenger.json").read_text())
           assert shadow["mode"] == "RESEARCH_ONLY"
           assert shadow["production_effect"] == "NONE"
@@ -69,5 +111,15 @@ jobs:
           assert shadow["guardrails"]["v3_019_eligible"] is False
           assert shadow["guardrails"]["sizing_multiplier"] == 1.0
           assert shadow["guardrails"]["production_action_changed"] is False
+          assert shadow["prediction_ledger_rows"] >= 3
+          assert shadow["latest_decision_date"] == "2026-08-21"
+          assert shadow["call_state"] == "STRONG_FAVORABLE"
+          assert abs(shadow["rolling_percentile"] - 0.8492063492063492) < 1e-12
+
+          with Path("site/v3_challenger_history.csv").open(newline="") as handle:
+              rows = list(csv.DictReader(handle))
+          assert len(rows) >= 3
+          assert rows[-1]["decision_date"] == "2026-08-21"
+          assert rows[-1]["v3_call_state"] == "STRONG_FAVORABLE"
           print(json.dumps(shadow, indent=2))
           PY
