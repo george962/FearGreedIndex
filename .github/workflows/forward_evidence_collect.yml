@@ -24,7 +24,7 @@ jobs:
       github.event_name != 'workflow_run' ||
       github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
 
     steps:
       - name: Check out main
@@ -49,14 +49,30 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      - name: Run forward-evidence tests
-        run: python -m unittest -v v3.tests.test_forward_evidence
+      - name: Run forward-evidence and shadow-ledger tests
+        run: |
+          python -m unittest -v \
+            v3.tests.test_forward_evidence \
+            v3.tests.test_shadow_predictions
 
-      - name: Collect latest sealed evidence
+      - name: Collect latest sealed feature evidence
         run: python -m v3.evidence.collect_forward_evidence
 
-      - name: Verify sealed evidence
+      - name: Verify sealed feature evidence
         run: python -m v3.evidence.verify_forward_lane
+
+      - name: Reconstruct frozen V3 Treasury dataset for shadow inference
+        run: |
+          python -m v3.features.build_features
+          python -m v3.labels.build_labels
+          python -m v3.evaluation.validate_dataset
+          python -m v3.ci.run_treasury_feature_stage
+
+      - name: Append immutable shadow predictions
+        run: python -m v3.evidence.shadow_predictions collect
+
+      - name: Verify immutable shadow prediction lane
+        run: python -m v3.evidence.shadow_predictions verify
 
       - name: Commit only evidence ledgers if main is unchanged
         shell: bash
@@ -65,19 +81,20 @@ jobs:
 
           if git diff --quiet -- \
             v3/evidence/forward_feature_ledger.csv \
-            v3/evidence/forward_treasury_source.csv; then
-            echo "Forward evidence is already current."
+            v3/evidence/forward_treasury_source.csv \
+            v3/evidence/shadow_prediction_ledger.csv; then
+            echo "Forward evidence and shadow predictions are already current."
             exit 0
           fi
 
-          # Evidence was generated using GENERATION_SHA. Never rebase those bytes
-          # onto newer code or data: if main moved while generation was running,
-          # abort and let the next workflow run regenerate from the new main.
+          # Feature evidence and its matching shadow prediction are generated from
+          # GENERATION_SHA. Never rebase those bytes onto newer code/data. If main
+          # moves during generation, abort and let the next run regenerate atomically.
           git fetch origin main
           REMOTE_SHA="$(git rev-parse origin/main)"
           LOCAL_SHA="$(git rev-parse HEAD)"
           if [ "$LOCAL_SHA" != "$GENERATION_SHA" ] || [ "$REMOTE_SHA" != "$GENERATION_SHA" ]; then
-            echo "main changed during evidence generation; refusing to publish stale evidence"
+            echo "main changed during evidence generation; refusing to publish stale evidence/predictions"
             exit 1
           fi
 
@@ -87,12 +104,13 @@ jobs:
 
           git add \
             v3/evidence/forward_feature_ledger.csv \
-            v3/evidence/forward_treasury_source.csv
+            v3/evidence/forward_treasury_source.csv \
+            v3/evidence/shadow_prediction_ledger.csv
 
           if git diff --cached --quiet; then
             echo "No evidence changes to commit."
             exit 0
           fi
 
-          git commit -m "Append untouched forward evidence"
+          git commit -m "Append untouched evidence and V3 shadow prediction"
           git push origin HEAD:main
