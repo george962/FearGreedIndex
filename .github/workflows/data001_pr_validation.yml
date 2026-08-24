@@ -1,0 +1,139 @@
+name: Validate DATA-001 Long-History Core
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/data001_pr_validation.yml"
+      - "FearGreedMarketData.py"
+      - "requirements.txt"
+      - "v3/data_sources/fetch_long_history_core.py"
+      - "v3/data_sources/fetch_vix.py"
+      - "v3/data_sources/fetch_treasury.py"
+      - "v3/features/build_long_history_core.py"
+      - "v3/labels/build_long_history_labels.py"
+      - "v3/evaluation/validate_long_history_core.py"
+      - "v3/reports/feature_registry_long_history_core.json"
+      - "v3/tests/test_long_history_core.py"
+      - "v3/checkpoints/DATA-001.md"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: data001-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+      HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+
+    steps:
+      - name: Check out PR head branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Record generation commit
+        shell: bash
+        run: echo "GENERATION_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run DATA-001 unit tests
+        run: python -m unittest -v v3.tests.test_long_history_core
+
+      - name: Freeze initial source snapshots if absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f v3/data/long_history/source_manifest.json ]; then
+            echo "Frozen DATA-001 sources already exist; verifying without network refresh."
+            python -m v3.data_sources.fetch_long_history_core verify
+          else
+            echo "Creating initial immutable DATA-001 source snapshots."
+            python -m v3.data_sources.fetch_long_history_core freeze
+            python -m v3.data_sources.fetch_long_history_core verify
+          fi
+
+      - name: Build long-history features and labels
+        run: |
+          python -m v3.features.build_long_history_core
+          python -m v3.labels.build_long_history_labels
+
+      - name: Validate DATA-001 end to end
+        run: python -m v3.evaluation.validate_long_history_core
+
+      - name: Prove no Fear & Greed entered core feature registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -qi 'fear_greed' v3/reports/feature_registry_long_history_core.json; then
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          registry = json.loads(Path('v3/reports/feature_registry_long_history_core.json').read_text())
+          assert registry['cnn_fear_greed_included'] is False
+          assert all('fear_greed' not in item['name'].lower() for item in registry['features'])
+          PY
+          fi
+
+      - name: Upload DATA-001 validation artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: data001-long-history-core-${{ github.run_id }}
+          if-no-files-found: error
+          path: |
+            v3/data/long_history/source_manifest.json
+            v3/data/long_history/spx_daily.csv.gz
+            v3/data/long_history/vix_daily.csv.gz
+            v3/data/long_history/treasury_daily.csv.gz
+            v3/data/long_history/core_features.parquet
+            v3/data/long_history/core_labels.parquet
+            v3/data/long_history/core_model_dataset.parquet
+            v3/reports/feature_registry_long_history_core.json
+            v3/reports/data001_summary.json
+
+      - name: Commit initial frozen snapshots and deterministic summary
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add \
+            v3/data/long_history/source_manifest.json \
+            v3/data/long_history/spx_daily.csv.gz \
+            v3/data/long_history/vix_daily.csv.gz \
+            v3/data/long_history/treasury_daily.csv.gz \
+            v3/reports/data001_summary.json
+
+          if git diff --cached --quiet; then
+            echo "DATA-001 frozen evidence is already committed."
+            exit 0
+          fi
+
+          git fetch origin "$HEAD_BRANCH"
+          REMOTE_SHA="$(git rev-parse FETCH_HEAD)"
+          if [ "$REMOTE_SHA" != "$GENERATION_SHA" ]; then
+            echo "PR head changed during DATA-001 generation; refusing to publish stale snapshots."
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Freeze DATA-001 long-history source snapshots"
+          git push origin "HEAD:$HEAD_BRANCH"
