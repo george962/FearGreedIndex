@@ -21,10 +21,14 @@ on:
       - "test_v3_challenger.py"
       - "v3/evidence/forward_feature_ledger.csv"
       - "v3/evidence/forward_checkpoints.json"
+      - "v3/evidence/shadow_prediction_ledger.csv"
+      - "v3/evidence/shadow_predictions.py"
+      - "v3/tests/test_shadow_predictions.py"
       - "v3/features/**"
       - "v3/labels/**"
       - "v3/reports/feature_registry_treasury.json"
       - "v3/reports/stab004_evaluation.json"
+      - "v3/methodology/STAB-004/manifest.json"
       - "v3/evaluation/stab001_past_only.py"
       - "v3/evaluation/stab003_consensus_abstention.py"
       - "v3/evaluation/stab004_rolling_normalization.py"
@@ -72,6 +76,8 @@ jobs:
             "scripts/build_dashboard.py"
             "scripts/build_v3_challenger.py"
             "v3/evidence/forward_feature_ledger.csv"
+            "v3/evidence/shadow_prediction_ledger.csv"
+            "v3/evidence/shadow_predictions.py"
             "v3/reports/stab004_evaluation.json"
           )
           for file in "${required_files[@]}"; do
@@ -91,7 +97,13 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Run repository tests
-        run: python -m unittest -v test_feargreed.py test_fear_greed_market_data.py test_dashboard.py test_v3_challenger.py
+        run: |
+          python -m unittest -v \
+            test_feargreed.py \
+            test_fear_greed_market_data.py \
+            test_dashboard.py \
+            test_v3_challenger.py \
+            v3.tests.test_shadow_predictions
 
       - name: Generate static dashboard
         run: python scripts/build_dashboard.py
@@ -106,6 +118,9 @@ jobs:
       - name: Verify EVID-001 remains sealed
         run: python -m v3.evidence.verify_forward_lane
 
+      - name: Verify immutable V3 shadow predictions
+        run: python -m v3.evidence.shadow_predictions verify
+
       - name: Add research-only V3 challenger
         run: python scripts/build_v3_challenger.py
 
@@ -113,10 +128,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for file in site/index.html site/styles.css site/app.js site/version.json site/analysis.json site/v3_challenger.json; do
+          for file in \
+            site/index.html \
+            site/styles.css \
+            site/app.js \
+            site/version.json \
+            site/analysis.json \
+            site/v3_challenger.json \
+            site/v3_challenger_history.csv; do
             test -f "$file" || { echo "::error file=$file::Missing generated file"; exit 1; }
           done
           grep -q 'id="v3-research-challenger"' site/index.html
+          grep -q 'IMMUTABLE SHADOW MODE' site/index.html
           python - <<'PY'
           import json
           from pathlib import Path
