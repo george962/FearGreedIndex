@@ -1,0 +1,49 @@
+{
+  "champion_selected": false,
+  "cnn_fear_greed_included": false,
+  "complete_feature_end": "2026-08-18",
+  "complete_feature_rows": 8009,
+  "complete_feature_start": "1990-12-28",
+  "core_001_evaluated": false,
+  "dataset_id": "DATA-001",
+  "era_complete_row_counts": {
+    "1990s": 1564,
+    "2000s": 2264,
+    "2010s": 2516,
+    "2020s": 1665
+  },
+  "feature_count": 47,
+  "feature_rows": 9224,
+  "feature_set_version": "v3-long-history-core-001",
+  "interactions_included": false,
+  "mature_favorable_entry_20d_rows": 9204,
+  "note": "DATA-001 validates data infrastructure only; no model has been fit and no historical outcomes have been inspected for method selection.",
+  "sizing_multiplier": 1.0,
+  "source_validation": {
+    "champion_selected": false,
+    "cnn_fear_greed_included": false,
+    "dataset_id": "DATA-001",
+    "research_cutoff": "2026-08-18",
+    "research_start": "1990-01-02",
+    "sizing_multiplier": 1.0,
+    "spx": {
+      "end": "2026-08-18",
+      "rows": 9224,
+      "start": "1990-01-02"
+    },
+    "status": "PASS",
+    "treasury": {
+      "end": "2026-08-18",
+      "rows": 9163,
+      "start": "1990-01-02"
+    },
+    "v3_019_eligible": false,
+    "vix": {
+      "end": "2026-08-18",
+      "rows": 9253,
+      "start": "1990-01-02"
+    }
+  },
+  "status": "PASS",
+  "v3_019_eligible": false
+}

@@ -1,0 +1,70 @@
+{
+  "dataset_id": "DATA-001",
+  "governance": {
+    "champion_selected": false,
+    "cnn_fear_greed_included": false,
+    "live_source_dependency_in_experiments": false,
+    "sizing_multiplier": 1.0,
+    "v3_019_eligible": false
+  },
+  "research_cutoff": "2026-08-18",
+  "research_start": "1990-01-02",
+  "retrieved_utc": "2026-08-24T01:19:20.676559+00:00",
+  "source_contract_version": "v3-long-history-source-001",
+  "sources": {
+    "spx": {
+      "acquisition_frame_sha256": "912118e1737f861d775fa949a03b56e2ed56419ccdda2670fad0ee1a4f8b0ad4",
+      "columns": [
+        "date",
+        "open",
+        "high",
+        "low",
+        "close",
+        "adj_close",
+        "volume"
+      ],
+      "end": "2026-08-18",
+      "normalized_sha256": "fe4706b47fa5fec5e996e387593cea14bc58e8f9f7ae76a8a13774bf04f7299e",
+      "rows": 9224,
+      "snapshot_sha256": "cb2e9ccc959edd3a1e5974207e0456dcb0a9261b17701b1f71c54a676259bc6d",
+      "source": "Yahoo Finance via pinned yfinance acquisition path",
+      "start": "1990-01-02",
+      "symbol": "^GSPC"
+    },
+    "treasury": {
+      "columns": [
+        "date",
+        "dgs2",
+        "dgs10"
+      ],
+      "end": "2026-08-18",
+      "normalized_sha256": "8eb61df4e2b10a966ad33b167cfea855dd2c01140ad5aa0488f57b2707ccb752",
+      "rows": 9163,
+      "series": [
+        "DGS2",
+        "DGS10"
+      ],
+      "snapshot_sha256": "368ae200f4f78a344a4f8632ea7c2da8444b6a143c0d495352df78bce77fe5c2",
+      "source": "Federal Reserve Board H.15 via FRED",
+      "source_sha256": {
+        "DGS10": "33c564461d1038606014c62641d257ee7091c6f42297ebbf31e4f47dd9ad41c0",
+        "DGS2": "b9d9d6f9da18b51a1b8d37c9ed6e0fcff5d41f9d543e87e0a93b5c73ad76cb3a"
+      },
+      "start": "1990-01-02"
+    },
+    "vix": {
+      "columns": [
+        "date",
+        "vix_close"
+      ],
+      "end": "2026-08-18",
+      "normalized_sha256": "8babdd0c33968b2b891f73f878b350d5fb63ed0a26f3d329cb9d7ba595179e33",
+      "rows": 9253,
+      "snapshot_sha256": "3f0f3462a87e2ea4288dcb8c0835617d283e254a089de177289df0a7c787961c",
+      "source": "Cboe VIX Index historical daily data",
+      "source_sha256": "2cbdd7489a304eac0132205d4262083d4d6ae6208e16255db424ed5b5afee215",
+      "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+      "start": "1990-01-02"
+    }
+  }
+}
