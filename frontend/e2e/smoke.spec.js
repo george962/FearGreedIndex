@@ -30,7 +30,7 @@ test('research panel cannot imply an approved champion', async ({ page, isMobile
   await expect(page.getByText('Champion selected')).toBeVisible();
 });
 
-test('same-site production contract: no separate domain, relative bundles, and existing evidence URLs', async ({ page }) => {
+test('same-site production contract: no separate domain, relative bundles, and existing evidence URLs', async ({ page, isMobile }) => {
   const response = await page.goto('/index.html');
   expect(response?.status()).toBe(200);
   const root = page.locator('#root');
@@ -39,7 +39,11 @@ test('same-site production contract: no separate domain, relative bundles, and e
   const scripts = await page.locator('script[src]').evaluateAll(els => els.map(el => el.getAttribute('src')));
   expect(scripts.length).toBeGreaterThan(0);
   expect(scripts.every(src => src.startsWith('./assets/'))).toBe(true);
-  await expect(page.locator('a[href="./analysis.json"]').first()).toBeAttached();
+  // The published analysis link lives in Strategy Evidence, not Overview.
+  if (isMobile) await page.getByRole('button', { name: 'Open menu' }).click();
+  await page.getByRole('button', { name: 'Strategy Evidence' }).click();
+  await expect(page.getByRole('heading', { name: 'Signals with their caveats.' })).toBeVisible();
+  await expect(page.locator('a[href="./analysis.json"]').first()).toBeVisible();
   const data = await page.request.get('/analysis.json');
   expect(data.status()).toBe(200);
   const json = await data.json();
