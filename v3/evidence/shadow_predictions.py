@@ -33,10 +33,10 @@ from v3.evaluation.stab004_rolling_normalization import (
     rolling_score_percentiles,
 )
 from v3.evidence.append_forward_snapshot import GENESIS_HASH, canonical_json, canonical_scalar, sha256_bytes
+from v3.evidence.frozen_training import load_frozen_shadow_historical_dataset
 from v3.models.common import load_feature_registry, validate_feature_columns
 
 ROOT = Path(__file__).resolve().parents[2]
-HISTORICAL_DATASET = ROOT / "v3" / "data" / "model_dataset_treasury.parquet"
 FEATURE_REGISTRY = ROOT / "v3" / "reports" / "feature_registry_treasury.json"
 FORWARD_FEATURE_LEDGER = ROOT / "v3" / "evidence" / "forward_feature_ledger.csv"
 PREDICTION_LEDGER = ROOT / "v3" / "evidence" / "shadow_prediction_ledger.csv"
@@ -137,7 +137,7 @@ def _load_frozen_context() -> tuple[dict[str, Any], str, list[str], pd.DataFrame
     _require(float(evaluation.get("current_sizing_multiplier", 0.0)) == 1.0, "Shadow challenger cannot change sizing")
 
     feature_version, features = load_feature_registry(FEATURE_REGISTRY)
-    historical = pd.read_parquet(HISTORICAL_DATASET, engine="pyarrow").copy()
+    historical = load_frozen_shadow_historical_dataset().copy()
     historical["decision_date"] = pd.to_datetime(historical["decision_date"], errors="raise").dt.normalize()
     historical = historical.loc[historical["decision_date"].le(AS_OF)].sort_values("decision_date").reset_index(drop=True)
     historical = add_opportunity_targets(historical)
