@@ -174,7 +174,10 @@ def normalized_csv_bytes(frame: pd.DataFrame) -> bytes:
 
 
 def compressed_snapshot_bytes(normalized_payload: bytes) -> bytes:
-    return gzip.compress(normalized_payload, compresslevel=9, mtime=0)
+    compressed = gzip.compress(normalized_payload, compresslevel=9, mtime=0)
+    # Canonical gzip OS=Unix (3), preserving the original frozen snapshot
+    # SHA-256 independently of host platform and zlib's OS identifier.
+    return compressed[:9] + bytes([3]) + compressed[10:]
 
 
 def write_snapshot(

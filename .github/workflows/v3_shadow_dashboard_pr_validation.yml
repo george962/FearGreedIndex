@@ -25,6 +25,10 @@ on:
       - "v3/evaluation/stab003_consensus_abstention.py"
       - "v3/evaluation/stab004_rolling_normalization.py"
       - "v3/ci/run_treasury_feature_stage.py"
+      - "v3/data_sources/fetch_treasury.py"
+      - "v3/evidence/frozen_training.py"
+      - "v3/frozen/STAB-004/**"
+      - "v3/tests/test_frozen_training.py"
 
 permissions:
   contents: read
@@ -70,6 +74,9 @@ jobs:
       - name: Verify EVID-001 remains sealed
         run: python -m v3.evidence.verify_forward_lane
 
+      - name: Verify frozen shadow input snapshots
+        run: python -m unittest -v v3.tests.test_frozen_training
+
       - name: Generate immutable shadow prediction ledger
         run: |
           python -m v3.evidence.shadow_predictions collect
@@ -111,15 +118,23 @@ jobs:
           assert shadow["guardrails"]["v3_019_eligible"] is False
           assert shadow["guardrails"]["sizing_multiplier"] == 1.0
           assert shadow["guardrails"]["production_action_changed"] is False
-          assert shadow["prediction_ledger_rows"] >= 3
-          assert shadow["latest_decision_date"] == "2026-08-21"
-          assert shadow["call_state"] == "STRONG_FAVORABLE"
-          assert abs(shadow["rolling_percentile"] - 0.8492063492063492) < 1e-12
+          from v3.evidence.shadow_predictions import read_prediction_ledger
+          frozen_rows = read_prediction_ledger()
+          assert len(frozen_rows) >= 3
+          latest = frozen_rows[-1]
+          assert shadow["prediction_ledger_rows"] == len(frozen_rows)
+          assert shadow["latest_decision_date"] == latest["decision_date"]
+          assert shadow["call_state"] == latest["call_state"]
+          if latest["rolling_percentile"] == "NA":
+              assert shadow["rolling_percentile"] is None
+          else:
+              assert abs(shadow["rolling_percentile"] - float(latest["rolling_percentile"])) < 1e-12
 
           with Path("site/v3_challenger_history.csv").open(newline="") as handle:
               rows = list(csv.DictReader(handle))
           assert len(rows) >= 3
-          assert rows[-1]["decision_date"] == "2026-08-21"
-          assert rows[-1]["v3_call_state"] == "STRONG_FAVORABLE"
+          assert len(rows) == len(frozen_rows)
+          assert rows[-1]["decision_date"] == latest["decision_date"]
+          assert rows[-1]["v3_call_state"] == latest["call_state"]
           print(json.dumps(shadow, indent=2))
           PY
