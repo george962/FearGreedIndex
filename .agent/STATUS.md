@@ -1,38 +1,39 @@
 # FearGreedIndex productization — durable engineering status
 
-Last initial scaffold preparation: 2026-10-09. **No project code, tests, runtime workflows, GitHub PRs, or deployments were changed or executed when this starter kit was drafted.** These are proposed instructions to add to the repository and validate on a feature branch.
+**Package checkpoint:** 2026-10-09 UTC. **Prepared offline for user upload; NOT committed, pushed, merged, or deployed by this package.** Exact branch and Git SHAs must be filled in after the user applies it to their checkout. No repository credentials or settings are needed to use these documents.
 
 ## Milestones
 
-| ID | Status | Evidence and commits | Next action |
+| ID | Status | Evidence | Next action |
 | --- | --- | --- | --- |
-| FGI-001 | NOT STARTED | None | Read plan; inspect current site and data rights; establish preflight baseline |
-| FGI-002 | NOT STARTED | None | Wait for FGI-001 acceptance |
-| FGI-003 | NOT STARTED | None | Wait for FGI-002 acceptance |
-| FGI-004 | NOT STARTED | None | Wait for relevant preceding milestones |
+| FGI-001 | PARTIAL — local delivery package | Read-only source/deployment/research inspection; template modification helper syntax-checked and applied to a synthetic fixture; live tests NOT RUN | Apply package on a feature branch; baseline and regression tests; review source rights |
+| FGI-002 | NOT STARTED | Depends on FGI-001 acceptance | Do not start yet |
+| FGI-003 | NOT STARTED | Depends on FGI-002 | Do not start yet |
+| FGI-004 | NOT STARTED | Depends on earlier milestones | Do not start yet |
 
 ## Current task
 
 FGI-001: `.agent/execplans/FGI-001-public-foundation.md`.
 
-## Research-boundary snapshot (not a live status guarantee)
+## Latest implementation handoff
 
-Based on repository documentation reviewed 2026-10-09: v2.1 is frozen; v3 has no promotable champion, and its forward evidence remains sealed. On each new session re-read `v3/STATUS.md` rather than treating this summary as authoritative.
+- Included files: project-owned `.agent/WORKFLOW.md`; revised instructions; revised README; `docs/USER_GUIDE.md`; `docs/PUBLICATION_PRECHECK.md`; `test_public_foundation.py`; a **local one-time helper** `extras/apply_fgi001.py` that changes only the dashboard presentation in `scripts/build_dashboard.py` when run.
+- Validation performed: helper and new test module compiled with Python; dry-run and application against a synthetic source fixture PASS; `python -m unittest -v test_public_foundation` PASS (6 tests) **on that synthetic fixture only**; AST syntax and preservation of `noindex,nofollow` verified in that fixture.
+- Validation **not performed**: complete local repository's root and v3 tests, a real `python scripts/build_dashboard.py` build, generated semantic decision parity, live Pages visit, mobile/keyboard browser validation, third-party data licensing review, CI checks. These results MUST remain unverified until actually executed.
+- Implementation commit SHA: **NONE (package only)**. Checkpoint commit SHA: **NONE (package only)**. Development branch: **user choice**.
+- Research protections: v2.1 is frozen, v3 shadow is research-only, no evidence ledger was modified. Recheck `v3/STATUS.md` each session.
 
-## Active blockers / owner decisions
+## Blocking owner decisions
 
-- Confirm desired public URL/hosting and branding.
-- Review source licenses and public redistribution permissions for all exposed market data.
-- Confirm when discovery (`noindex`) should be enabled for public search engines.
+1. Verify the canonical Pages URL/desired public branding and whether it is accessible to visitors. Do not modify repository Pages settings without approval.
+2. Confirm licensing/attribution and public redistribution rights for sentiment and SPX/SPY inputs and exported derivative datasets.
+3. Decide when search indexing is allowed; both templates deliberately keep `noindex,nofollow`.
+4. Explicitly approve deployment/merge only after successful local/CI checks and acceptance review.
 
-## Agent checkpoint protocol
+## Single next executable step
 
-Every implementation stop must update this file with:
-- UTC update timestamp and branch.
-- Exact milestone and checklist step completed/partial/blocked.
-- Changed files and implementation commit SHA (if committed).
-- Test commands/results and links to CI if actually run.
-- Status/checkpoint commit SHA where available.
-- Risks/blockers and the **single exact next runnable step**.
+On the user's local checkout: create or switch to a clean FGI-001 feature branch, extract this bundle, run `python extras/apply_fgi001.py --check`, then apply the helper and run the precise test/build sequence in `FGI-001-public-foundation.md`. Record actual baseline/evidence before labeling any item COMPLETE.
 
-If a tool can't write to this file, say so in the handoff and don't claim durable checkpointing.
+## Checkpoint requirements for all future work
+
+Record UTC timestamp, branch, task state, changed files, implementation SHA, checkpoint SHA when available, commands/exit codes, blockers and one next runnable step. If files are not committed, do not claim durability or a commit hash.

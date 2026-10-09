@@ -1,6 +1,6 @@
 # FearGreedIndex — shared coding-agent instructions
 
-This file applies to Codex, Claude Code (via `CLAUDE.md`), and any Atomic workflow working in this repository. Read it before editing. Do not infer permissions to perform external actions from this file.
+This file applies to Codex, Claude Code (via `CLAUDE.md`), and other repository-aware coding agents working in this repository. Read it before editing. Do not infer permissions to perform external actions from this file.
 
 ## Mission
 
@@ -34,6 +34,8 @@ Do not use old chat history as project state. Read the checked-in state and curr
 
 ## How to work on substantial changes
 
+Follow `.agent/WORKFLOW.md` for the project-owned agent delivery lifecycle and approval gates.
+
 1. Identify the next eligible, unblocked milestone from `.agent/STATUS.md` and `.agent/ROADMAP.md`; don't restart completed work when asked to continue.
 2. For multi-file features, refactors, workflow changes, or migrations, read `.agent/PLANS.md` and maintain a self-contained ExecPlan under `.agent/execplans/` **before** implementation. Keep its progress, decisions, surprises, and evidence current.
 3. Check `git status --short` and current branch. Preserve uncommitted user work. Use a new feature branch when one has not been provided. Don't force-push or reset others' changes.
@@ -61,5 +63,13 @@ Stop rather than guessing if work would (a) alter the frozen v2.1 methodology, (
 
 - Codex and other agents should follow this `AGENTS.md` and `.agent/PLANS.md`.
 - Claude Code should read `CLAUDE.md`, which delegates to this file.
-- Atomic can use its built-in `goal` workflow for durable ledger and reviewer gates or the project-local `feargreed-delivery` workflow for a plan-specific, human-approved handoff.
+- Use `.agent/WORKFLOW.md` for the project-owned planning, implementation, review, verification, and checkpoint process. This is a set of repository rules, not a dependency on any external agent runner.
 - These files guide active coding sessions; they do not schedule independent work or guarantee platform-specific agent support.
+
+## Repository hygiene
+
+Before deleting, moving, or archiving files, follow `docs/REPOSITORY_CLEANUP.md`. Existing tests, workflow entrypoints, ledgers, baseline reports, and research checkpoints are protected until dependencies and preservation have been verified. Never delete tests to make CI pass.
+
+## Agent roles
+
+For complex tasks apply `.agent/roles/planner.md`, `.agent/roles/implementer.md`, `.agent/roles/reviewer.md`, and `.agent/roles/verifier.md` in sequence. A separate agent/subagent is optional; if unavailable, perform separate review passes with fresh context.
