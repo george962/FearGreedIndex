@@ -12,16 +12,16 @@ In scope: README/overview/navigation, metadata, usability, freshness and sources
 
 ## Progress
 
-- [ ] Preflight: inspect deployed Pages configuration and latest actual source state; document what the public URL currently serves. Verify data-license/public visibility requirements; record missing approvals.
-- [ ] Establish baseline: capture generated JSON schema, HTML/asset list, output timestamps, and representative production decision from a clean rebuild; never change historical decisions to satisfy parity.
-- [ ] Implement public information architecture and onboarding: clear name, purpose, user-oriented documentation, repository homepage link suggestion, mobile and keyboard basics.
-- [ ] Add transparent source/freshness and research-status presentation; stale/unavailable data must not masquerade as live; v3 must remain research-only.
-- [ ] Add or update targeted tests for publication contracts and readable metadata; verify existing dashboard, ledger, and v3 output invariants.
-- [ ] Run and record targeted + relevant regression commands, inspect output, update `.agent/STATUS.md`, write final review and handoff.
+- [~] Preflight: read-only source/workflow/research status inspected; canonical Pages URL, live reachability and data rights remain UNVERIFIED. See `docs/PUBLICATION_PRECHECK.md`.
+- [ ] Establish baseline: actual clean repository test/build, JSON schema and production-decision hashes NOT RUN in this package-only environment; capture before applying to a clean checkout when possible.
+- [~] Local deliverable prepared: `README.md`, `docs/USER_GUIDE.md`, template onboarding and skip links via `extras/apply_fgi001.py`. Await application and browser validation.
+- [~] Local presentation uses pre-existing `signal_age_days` and recorded sentiment date, distinguishes snapshot generation and source observation, and labels v3 research-only. Live output NOT VERIFIED.
+- [~] `test_public_foundation.py` prepared; compiled; 6 contract smoke tests passed against a synthetic fixture, NOT RUN against real repo. Existing dashboard/ledger/v3 invariants NOT VERIFIED.
+- [ ] Run targeted/root/v3 test suites, actual build, before-after semantic comparison, browser smoke; update checkpoint with exact results and commit SHAs.
 
 ## Surprises & Discoveries
 
-- None observed yet. Record findings during preflight.
+- User requested project-owned agent workflow; no third-party workflow runtime. Current source has `noindex` on both Pages; an existing stale-observation warning is generated when `signal_age_days > 4`. The new UI reuses that threshold instead of changing strategy logic. Local package cannot independently verify site live state or run its full original runtime suite.
 
 ## Decision Log
 
@@ -58,7 +58,7 @@ From repository root on a new feature branch, after dependencies are installed:
 
 - NOT RUN: baseline and after-change unit tests above; expected zero failures.
 - NOT RUN: static build command; expected generated `site/index.html`, `site/styles.css`, `site/app.js`, `site/analysis.json`, `site/version.json`.
-- NOT RUN: publication metadata tests; expected accurate source/freshness/limitations with accessible navigation.
+- PREPARED, NOT RUN ON REPO: `test_public_foundation.py` checks navigation, source escaping, SEO guards, freshness contract and documentation; expected pass after helper applies.
 - NOT RUN: semantic parity comparison of production decisions and historical replay; expected no change except explicitly allowed presentation fields.
 - NOT RUN: live public URL check and mobile keyboard smoke tests; expected usable site, accurate loading/error states, correct public visibility.
 - NOT RUN: licensing/attribution review; public data must not be newly redistributed until cleared.
@@ -69,4 +69,4 @@ Approval required to enable search crawling, change public data scope, use third
 
 ## Outcomes & Retrospective
 
-- Not implemented. Fill in links, changes, tests, commits, risks, and next milestone when accepted.
+- PARTIAL local handoff only. New user-facing files: README, visitor guide, source-rights preflight, accessible onboarding/nav/freshness via one-time helper; tests and project-owned workflow. Python compilation and six synthetic contract tests passed; full repository build/tests not run; no commit SHA, no deploy. Blockers: live URL, source rights, owner approval for indexing/release. Next: apply files on local branch, establish baseline, run full tests and document actual outcomes.

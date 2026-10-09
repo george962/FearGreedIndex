@@ -1,7 +1,5 @@
-# Claude Code project entry point
+# Claude Code entry point
 
-Read `AGENTS.md` first and treat it as the shared project contract. Also read `PRODUCT.md`, `DESIGN.md`, `.agent/ROADMAP.md`, `.agent/STATUS.md`, and `.agent/PLANS.md` before substantial edits.
+Read `AGENTS.md` in full before changing files. It is the shared source of instructions for Claude Code and Codex.
 
-For any non-trivial work, identify the next allowed `.agent/execplans/FGI-*.md` document and keep its living progress sections updated. When asked to "continue," resume the next unfinished item recorded in `.agent/STATUS.md`; do not ask for the original brief again unless a real stop condition in `AGENTS.md` applies.
-
-Do not treat `v3/PLAN.md` as the product roadmap. `v3/STATUS.md` remains authoritative for research state, and v2.1 is frozen.
+For substantial work, use `.agent/PLANS.md`, `.agent/ROADMAP.md`, `.agent/STATUS.md`, and the active `.agent/execplans/FGI-*.md`. Apply the four role definitions in `.agent/roles/`. Never override the frozen v2.1 and v3 research safeguards. Stop for explicitly required owner approval; do not merge or deploy.

@@ -2571,7 +2571,8 @@ def render_history_page(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
-  <title>Fear &amp; Greed Decision History</title>
+  <title>Fear &amp; Greed | Historical decision research</title>
+  <meta name="description" content="Point-in-time replay of historical Fear and Greed research decisions, including uncertainty and limits.">
   <link rel="stylesheet" href="styles.css">
   <style>
     body {{ min-height:100vh; }}
@@ -2605,7 +2606,8 @@ def render_history_page(
   </style>
 </head>
 <body>
-  <main class="history-shell">
+  <a class="skip-link" href="#history-main">Skip to historical decisions</a>
+  <main class="history-shell" id="history-main" tabindex="-1">
     <div class="history-top">
       <div>
         <div class="eyebrow">POINT-IN-TIME REPLAY + FAST TIMING</div>
@@ -2693,10 +2695,12 @@ PAGE_TEMPLATE = Template(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
-  <title>Fear &amp; Greed Market Dashboard</title>
+  <title>Fear &amp; Greed | Evidence-first market research</title>
+  <meta name="description" content="Explore market sentiment, historical analogs, and their limitations. Research only; not live trading advice.">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body data-build-id="{{ build_id }}" data-refresh-seconds="{{ refresh_seconds }}">
+  <a class="skip-link" href="#main-content">Skip to market research</a>
   <div class="shell">
     <aside class="sidebar">
       <div class="brand">
@@ -2706,6 +2710,13 @@ PAGE_TEMPLATE = Template(
           <h1>Fear &amp; Greed<br>vs. S&amp;P 500</h1>
         </div>
       </div>
+
+      <nav class="primary-nav" aria-label="Research sections">
+        <a href="#market-context">Market context</a>
+        <a href="#historical-evidence">Historical evidence</a>
+        <a href="#research-methodology">How to interpret</a>
+        <a href="decision_history.html">Decision history</a>
+      </nav>
 
       <div class="gauge-card">
         {{ gauge | safe }}
@@ -2750,12 +2761,29 @@ PAGE_TEMPLATE = Template(
       </div>
     </aside>
 
-    <main class="workspace">
+    <main class="workspace" id="main-content" tabindex="-1">
+      <section class="panel onboarding-panel" aria-labelledby="intro-title">
+        <p class="eyebrow">MARKET SENTIMENT RESEARCH</p>
+        <h2 id="intro-title">What can today's fear and greed tell us?</h2>
+        <p>Compare the latest recorded sentiment with historically similar S&amp;P 500 market conditions.
+           Explore subsequent returns, downside outcomes, and the amount of supporting evidence.</p>
+        <div class="publication-facts" aria-label="Observation and report dates">
+          <p><strong>Sentiment observed:</strong> {{ metrics[0].note }}</p>
+          <p><strong>Data status:</strong> {{ 'Stale observation — ' ~ observation_age_days ~ ' calendar days old' if observation_age_days > 4 else 'Recent observation — ' ~ observation_age_days ~ ' calendar days old' }}</p>
+          <p><strong>Report generated:</strong> {{ generated }}</p>
+        </div>
+        <p class="research-disclaimer">This is a periodically generated research snapshot, not a live quote or investment recommendation.
+           Historical analogs do not establish predictive performance. Experimental v3 models remain research-only.</p>
+        <div class="intro-links">
+          <a href="#historical-evidence">Explore historical outcomes</a>
+          <a href="#research-methodology">Understand the methodology</a>
+        </div>
+      </section>
       {% if warnings %}
       <section class="warnings">{% for warning in warnings %}<div class="warning">{{ warning }}</div>{% endfor %}</section>
       {% endif %}
 
-      <section class="panel chart-panel">
+      <section class="panel chart-panel" id="market-context">
         <div class="panel-heading">
           <div><p class="eyebrow">MARKET CONTEXT</p><h2>Price vs. sentiment</h2></div>
           <span class="hint">The action compares sentiment only with historical observations in the same price regime.</span>
@@ -2798,7 +2826,7 @@ PAGE_TEMPLATE = Template(
         <p class="action-guardrail">{{ guidance.guardrail }}</p>
       </section>
 
-      <section class="panel history-panel">
+      <section class="panel history-panel" id="historical-evidence">
         <div class="panel-heading">
           <div><p class="eyebrow">POINT-IN-TIME REPLAY</p><h2>Historical Decisions</h2></div>
           <a href="decision_history.html">Open full history →</a>
@@ -2858,7 +2886,7 @@ PAGE_TEMPLATE = Template(
         </section>
       </div>
 
-      <section class="panel note-panel">
+      <section class="panel note-panel" id="research-methodology">
         <p class="eyebrow">HOW TO READ THIS</p>
         <p>
           The FAST TIMING layer can issue an EARLY BUY or EARLY TRIM before the slower analog
@@ -2895,6 +2923,19 @@ html, body { height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
 h1, h2, h3, p, dl, dd, dt { margin: 0; }
 a { color: var(--accent); }
+a:focus-visible { outline: 3px solid #e2c76e; outline-offset: 3px; }
+.skip-link { position: fixed; left: 12px; top: -100px; z-index: 9999; padding: 10px 14px; border-radius: 8px; background: #fff; color: #101827; }
+.skip-link:focus { top: 12px; }
+.primary-nav { display: flex; flex-wrap: wrap; gap: 7px; }
+.primary-nav a { padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: .78rem; text-decoration: none; }
+.primary-nav a:hover, .primary-nav a:focus-visible { border-color: var(--accent); }
+.onboarding-panel h2 { font-size: 1.25rem; margin: 2px 0 8px; }
+.onboarding-panel > p:not(.eyebrow) { color: var(--muted); font-size: .88rem; line-height: 1.55; }
+.publication-facts { margin: 14px 0; display: flex; flex-wrap: wrap; gap: 9px 18px; }
+.publication-facts p { color: var(--text); font-size: .78rem; }
+.publication-facts strong { color: #c8d4e8; }
+.intro-links { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; font-size: .83rem; font-weight: 700; }
+.intro-links a { text-underline-offset: 3px; }
 .shell { display: grid; grid-template-columns: 330px 1fr; height: 100vh; height: 100dvh; }
 .sidebar { background: var(--sidebar); border-right: 1px solid var(--border); padding: 22px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
 .workspace { overflow-y: auto; padding: 22px 26px 36px; display: grid; align-content: start; gap: 16px; }
@@ -3324,8 +3365,9 @@ def build(config_path: Path, root: Path, site_dir: Path, allow_yahoo: bool) -> N
     dashboard_html = PAGE_TEMPLATE.render(
         build_id=build_id,
         refresh_seconds=settings.refresh_seconds,
-        source=source_label,
+        source=html_lib.escape(source_label, quote=True),
         generated=generated.strftime("%Y-%m-%d %H:%M UTC"),
+        observation_age_days=signal_age_days,
         verdict=verdict,
         guidance=guidance,
         timing=timing,

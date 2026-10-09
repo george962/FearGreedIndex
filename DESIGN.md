@@ -1,6 +1,6 @@
 # FearGreedIndex — UX and visual design contract
 
-Inspired by Atomic's "reliable, minimal, powerful" approach, not by copying its terminal layout or code. The product should prioritize trustworthy data interpretation over novelty.
+A product-specific design standard; no external agent runtime or UI dependency. The product should prioritize trustworthy data interpretation over novelty.
 
 ## Principles
 
