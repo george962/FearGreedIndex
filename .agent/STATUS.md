@@ -1,38 +1,27 @@
-# FearGreedIndex productization — durable engineering status
+# FearGreedIndex product engineering — same-site checkpoint
 
-Last initial scaffold preparation: 2026-10-09. **No project code, tests, runtime workflows, GitHub PRs, or deployments were changed or executed when this starter kit was drafted.** These are proposed instructions to add to the repository and validate on a feature branch.
+Updated: 2026-10-09 UTC, local package delivery. This does not represent a GitHub commit, PR merge or deployment.
 
-## Milestones
+**Confirmed final public URL:** `https://george962.github.io/FearGreedIndex/index.html`. React must replace the `site/index.html` artifact in the existing GitHub Pages deployment. The previous separate worktree suggestion was solely for Git isolation, not for a separate public website. Normal feature-branch installation in the existing checkout is now documented.
 
-| ID | Status | Evidence and commits | Next action |
-| --- | --- | --- | --- |
-| FGI-001 | NOT STARTED | None | Read plan; inspect current site and data rights; establish preflight baseline |
-| FGI-002 | NOT STARTED | None | Wait for FGI-001 acceptance |
-| FGI-003 | NOT STARTED | None | Wait for FGI-002 acceptance |
-| FGI-004 | NOT STARTED | None | Wait for relevant preceding milestones |
+| Milestone | Local source readiness | Acceptance / next step |
+| --- | --- | --- |
+| FGI-001 Public foundation | PARTIAL — PR #81 still open when last checked | Reconcile it against current main and confirm data-publication rights, metadata and noindex; do not claim merged |
+| FGI-002 Modularization/presentation | SOURCE IMPLEMENTED — original Python signal engine unchanged; React/Vite bundles separately; original JSON/CSV contract preserved | Full npm build + Python parity + review of generated `site/index.html` |
+| FGI-003 Interactive explorer | SOURCE IMPLEMENTED — chart periods, historical filters, mature return denominators, exports, read-only V3 research | Desktop/mobile Playwright plus keyboard, accessibility and actual-data checks |
+| FGI-004 Reliable release | INTEGRATION CHECKS BUILT — read-only PR job, post-deploy exact-URL health check, rollback and audit docs | Generate lockfile, run complete release tests, hosted CI and owner-approved merge; verify live Pages after deployment |
 
-## Current task
+### Evidence available from this delivered package
 
-FGI-001: `.agent/execplans/FGI-001-public-foundation.md`.
+- Local isolated Python unit tests: 13 PASS (publication contracts, page target, installer, postdeploy checker).
+- Local JavaScript Node data-contract tests: 5 PASS.
+- Syntax: Python scripts, Node JS modules and known workflow configuration checked locally.
+- **Not run here:** Vite dependency installation/bundle, full Python engine, Playwright Chromium, GitHub Actions on new PR, fresh Pages deployment, and independent live React/browser/a11y/performance acceptance.
 
-## Research-boundary snapshot (not a live status guarantee)
+### Boundaries and blockers
 
-Based on repository documentation reviewed 2026-10-09: v2.1 is frozen; v3 has no promotable champion, and its forward evidence remains sealed. On each new session re-read `v3/STATUS.md` rather than treating this summary as authoritative.
+Research methods and evidence remain unchanged. V3 remains RESEARCH_ONLY, no champion promotion or tactical sizing. Source rights, branding, indexing, dependency security, browser acceptance and owner-approved deployment remain release gates. Previous `main` Pages workflow successfully deployed the legacy site, not this React package.
 
-## Active blockers / owner decisions
+### Exact next action
 
-- Confirm desired public URL/hosting and branding.
-- Review source licenses and public redistribution permissions for all exposed market data.
-- Confirm when discovery (`noindex`) should be enabled for public search engines.
-
-## Agent checkpoint protocol
-
-Every implementation stop must update this file with:
-- UTC update timestamp and branch.
-- Exact milestone and checklist step completed/partial/blocked.
-- Changed files and implementation commit SHA (if committed).
-- Test commands/results and links to CI if actually run.
-- Status/checkpoint commit SHA where available.
-- Risks/blockers and the **single exact next runnable step**.
-
-If a tool can't write to this file, say so in the handoff and don't claim durable checkpointing.
+Read `README.md`, install in a clean branch of the **existing repository**, generate `frontend/package-lock.json`, run `tools/run_release_checks.sh`, and report output. Reconcile PR #81 before owner-approved release. Do not treat an unmerged PR or successful source tests as a live release.

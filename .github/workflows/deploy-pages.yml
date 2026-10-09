@@ -15,6 +15,13 @@ on:
       - "requirements.txt"
       - "scripts/build_dashboard.py"
       - "scripts/build_v3_challenger.py"
+      - "scripts/publish_react_dashboard.py"
+      - "scripts/validate_react_publication.py"
+      - "tests/test_react_publication.py"
+      - "tests/test_same_site_health.py"
+      - "scripts/check_live_pages.py"
+      - ".github/workflows/fgi_frontend_pr_validation.yml"
+      - "frontend/**"
       - "test_feargreed.py"
       - "test_fear_greed_market_data.py"
       - "test_dashboard.py"
@@ -57,7 +64,7 @@ jobs:
       github.event_name != 'workflow_run' ||
       github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
 
     steps:
       - name: Check out current main
@@ -106,6 +113,9 @@ jobs:
             test_v3_challenger.py \
             v3.tests.test_shadow_predictions
 
+      - name: Validate React publication contract tests
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
       - name: Generate static dashboard
         run: python scripts/build_dashboard.py
 
@@ -125,6 +135,31 @@ jobs:
       - name: Add research-only V3 challenger
         run: python scripts/build_v3_challenger.py
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Test and build React UI
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run test
+          npm run build
+
+      - name: Publish React dashboard to existing site
+        run: |
+          python scripts/publish_react_dashboard.py
+          python scripts/validate_react_publication.py
+
+      - name: Run real-browser smoke tests
+        working-directory: frontend
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+
       - name: Verify generated website
         shell: bash
         run: |
@@ -136,11 +171,16 @@ jobs:
             site/version.json \
             site/analysis.json \
             site/v3_challenger.json \
-            site/v3_challenger_history.csv; do
+            site/v3_challenger_history.csv \
+            site/publication_manifest.json \
+            site/legacy-dashboard.html; do
             test -f "$file" || { echo "::error file=$file::Missing generated file"; exit 1; }
           done
-          grep -q 'id="v3-research-challenger"' site/index.html
-          grep -q 'IMMUTABLE SHADOW MODE' site/index.html
+          grep -q 'id="root"' site/index.html
+          grep -q 'noindex,nofollow' site/index.html
+          test -f site/publication_manifest.json
+          test -f site/legacy-dashboard.html
+          python scripts/validate_react_publication.py
           python - <<'PY'
           import json
           from pathlib import Path
@@ -167,6 +207,11 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
       - name: Deploy dashboard
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Check the existing /FearGreedIndex/index.html URL after deployment
+        run: python3 scripts/check_live_pages.py --attempts 10 --delay 12
